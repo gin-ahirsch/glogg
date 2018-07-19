@@ -23,6 +23,8 @@
 #include <QRegularExpression>
 #include <QColor>
 #include <QMetaType>
+#include <QVector>
+#include <vector>
 
 #include "persistable.h"
 
@@ -47,6 +49,9 @@ class Filter
     void setForeColor( const QString& foreColorName );
     const QString& backColorName() const;
     void setBackColor( const QString& backColorName );
+    int origin() const { return origin_; }
+    void setLoadedOffset( int offset );
+    int loadedOffset() const { return loaded_offset_; }
 
     // Operators for serialization
     // (must be kept to migrate filters from <=0.8.2)
@@ -54,19 +59,31 @@ class Filter
     friend QDataStream& operator>>( QDataStream& in, Filter& object );
 
     // Reads/writes the current config in the QSettings object passed
-    void saveToStorage( QSettings& settings ) const;
-    void retrieveFromStorage( QSettings& settings );
+    void saveToStorage( QSettings& settings, bool origin = true ) const;
+    void retrieveFromStorage( QSettings& settings, int origin = -1 );
 
   private:
     QRegularExpression regexp_;
     QString foreColorName_;
     QString backColorName_;
     bool enabled_;
+    int origin_; // index into Persistent( "loadedFilterSets" ), -1 if not loaded from a filterSet-file
+    int loaded_offset_; // index into Persistent( "loadedFilterSets" )[origin_], -1 if not loaded from a filterSet-file
 };
 
 // Represents an ordered set of filters to be applied to each line displayed.
 class FilterSet : public Persistable
 {
+  private:
+    using FilterList = QList<Filter>;
+
+  public:
+    using iterator = FilterList::iterator;
+    using const_iterator = FilterList::const_iterator;
+    using reference = FilterList::reference;
+    using const_reference = FilterList::const_reference;
+    using size_type = FilterList::size_type;
+
   public:
     // Construct an empty filter set
     FilterSet();
@@ -78,12 +95,10 @@ class FilterSet : public Persistable
             QColor* foreColor, QColor* backColor ) const;
 
     // Reads/writes the current config in the QSettings object passed
-    virtual void saveToStorage( QSettings& settings ) const;
-    virtual void retrieveFromStorage( QSettings& settings );
-
-    // Should be private really, but I don't know how to have 
-    // it recognised by QVariant then.
-    typedef QList<Filter> FilterList;
+    virtual void saveToStorage( QSettings& settings ) const { saveToStorage( settings, true ); }
+    void saveToStorage( QSettings& settings, bool origin ) const;
+    virtual void retrieveFromStorage( QSettings& settings ) { retrieveFromStorage( settings, -1 ); }
+    void retrieveFromStorage( QSettings& settings, int origin );
 
     // Operators for serialization
     // (must be kept to migrate filters from <=0.8.2)
@@ -93,6 +108,23 @@ class FilterSet : public Persistable
             QDataStream& in, FilterSet& object );
 
   private:
+    reference& operator[]( int index ) { return filterList[index]; }
+    const_reference& operator[]( int index ) const { return filterList[index]; }
+
+    reference& front() { return filterList.front(); }
+    const_reference& front() const { return filterList.front(); }
+    reference& back() { return filterList.back(); }
+    const_reference& back() const { return filterList.back(); }
+
+    iterator begin() { using std::begin; return begin( filterList ); }
+    iterator end() { using std::end; return end( filterList ); }
+    const_iterator cbegin() const { using std::begin; return begin( filterList ); }
+    const_iterator cend() const { using std::end; return end( filterList ); }
+
+    size_type size() const { return filterList.size(); }
+    bool empty() const { return filterList.empty(); }
+
+  private:
     static const int FILTERSET_VERSION;
 
     FilterList filterList;
@@ -100,10 +132,65 @@ class FilterSet : public Persistable
     // To simplify this class interface, FilterDialog can access our
     // internal structure directly.
     friend class FiltersDialog;
+    friend class Filter;
+};
+
+struct NamedFilterSet final
+{
+  public:
+    explicit NamedFilterSet( QString file ) : filename( file ) {}
+
+  public:
+    QString filename;
+    FilterSet set;
+};
+
+class LoadedFilterSets : public Persistable
+{
+  private:
+    // QVector has some issues with NamedFilterSet that std::vector does not.
+    using NamedFilterList = std::vector<NamedFilterSet>;
+
+  public:
+    using iterator = NamedFilterList::iterator;
+    using const_iterator = NamedFilterList::const_iterator;
+    using reference = NamedFilterList::reference;
+    using const_reference = NamedFilterList::const_reference;
+    using size_type = NamedFilterList::size_type;
+
+  public:
+    // Reads/writes the current config in the QSettings object passed
+    virtual void saveToStorage( QSettings& settings ) const;
+    virtual void retrieveFromStorage( QSettings& settings );
+
+  private:
+    reference& operator[]( int index ) { return namedFilterSets[index]; }
+    const_reference& operator[]( int index ) const { return namedFilterSets[index]; }
+
+    reference& front() { return namedFilterSets.front(); }
+    const_reference& front() const { return namedFilterSets.front(); }
+    reference& back() { return namedFilterSets.back(); }
+    const_reference& back() const { return namedFilterSets.back(); }
+
+    iterator begin() { using std::begin; return begin( namedFilterSets ); }
+    iterator end() { using std::end; return end( namedFilterSets ); }
+    const_iterator cbegin() const { using std::begin; return begin( namedFilterSets ); }
+    const_iterator cend() const { using std::end; return end( namedFilterSets ); }
+
+    size_type size() const { return namedFilterSets.size(); }
+
+  private:
+    static const int LOADED_FILTERSET_VERSION;
+
+    NamedFilterList namedFilterSets;
+
+    // To simplify this class interface, FilterDialog can access our
+    // internal structure directly.
+    friend class FiltersDialog;
+    friend class Filter;
 };
 
 Q_DECLARE_METATYPE(Filter)
 Q_DECLARE_METATYPE(FilterSet)
-Q_DECLARE_METATYPE(FilterSet::FilterList)
 
 #endif

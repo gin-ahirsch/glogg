@@ -1001,6 +1001,7 @@ void MainWindow::readSettings()
     updateRecentFileActions();
 
     // GetPersistentInfo().retrieve( QString( "settings" ) );
+    GetPersistentInfo().retrieve( QString( "loadedFilterSets" ) );
     GetPersistentInfo().retrieve( QString( "filterSet" ) );
 }
 

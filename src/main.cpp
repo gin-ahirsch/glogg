@@ -226,6 +226,8 @@ int main(int argc, char *argv[])
     GetPersistentInfo().registerPersistable(
             std::make_shared<Configuration>(), QString( "settings" ) );
     GetPersistentInfo().registerPersistable(
+            std::make_shared<LoadedFilterSets>(), QString( "loadedFilterSets" ) );
+    GetPersistentInfo().registerPersistable(
             std::make_shared<FilterSet>(), QString( "filterSet" ) );
     GetPersistentInfo().registerPersistable(
             std::make_shared<SavedSearches>(), QString( "savedSearches" ) );

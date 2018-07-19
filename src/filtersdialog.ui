@@ -6,25 +6,32 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>520</width>
-    <height>288</height>
+    <width>600</width>
+    <height>400</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Filters</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_3">
+  <layout class="QVBoxLayout" name="verticalLayout_7">
    <item>
-    <layout class="QVBoxLayout" name="verticalLayout_2">
-     <property name="sizeConstraint">
-      <enum>QLayout::SetNoConstraint</enum>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
      </property>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout">
+     <widget class="QWidget" name="tab">
+      <attribute name="title">
+       <string>Active</string>
+      </attribute>
+      <layout class="QHBoxLayout" name="horizontalLayout_4">
        <item>
         <layout class="QVBoxLayout" name="verticalLayout_4">
          <item>
-          <widget class="QListWidget" name="filterListWidget"/>
+          <widget class="QListWidget" name="filterListWidget">
+           <property name="selectionMode">
+            <enum>QAbstractItemView::ExtendedSelection</enum>
+           </property>
+          </widget>
          </item>
          <item>
           <layout class="QHBoxLayout" name="buttonsLayout">
@@ -122,17 +129,23 @@
              </property>
             </widget>
            </item>
+           <item row="3" column="0">
+            <widget class="QCheckBox" name="ignoreCaseCheckBox">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Ignore case</string>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
            <item row="4" column="0">
             <widget class="QLabel" name="label_2">
              <property name="text">
               <string>Fore Color: </string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="1">
-            <widget class="QComboBox" name="backColorBox">
-             <property name="enabled">
-              <bool>false</bool>
              </property>
             </widget>
            </item>
@@ -150,16 +163,17 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="0">
-            <widget class="QCheckBox" name="ignoreCaseCheckBox">
+           <item row="5" column="1">
+            <widget class="QComboBox" name="backColorBox">
              <property name="enabled">
               <bool>false</bool>
              </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QPushButton" name="saveToFileButton">
              <property name="text">
-              <string>Ignore case</string>
-             </property>
-             <property name="checked">
-              <bool>false</bool>
+              <string>Save to File</string>
              </property>
             </widget>
            </item>
@@ -168,21 +182,224 @@
         </layout>
        </item>
       </layout>
-     </item>
-     <item>
-      <widget class="QDialogButtonBox" name="buttonBox">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="standardButtons">
-        <set>QDialogButtonBox::Apply|QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-       </property>
-      </widget>
-     </item>
-    </layout>
+     </widget>
+     <widget class="QWidget" name="tab_2">
+      <attribute name="title">
+       <string>Loadable</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QListWidget" name="loadedFilterListWidget"/>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="QToolButton" name="addFilterFile">
+           <property name="toolTip">
+            <string>Load file</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../glogg.qrc">
+             <normaloff>:/images/plus.png</normaloff>:/images/plus.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="removeFilterFile">
+           <property name="toolTip">
+            <string>Remove file</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../glogg.qrc">
+             <normaloff>:/images/minus.png</normaloff>:/images/minus.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_2">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="undoChangesButton">
+           <property name="text">
+            <string>Undo changes</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="saveChangesButton">
+           <property name="text">
+            <string>Save changes</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QGridLayout" name="gridLayout">
+         <item row="1" column="5">
+          <layout class="QVBoxLayout" name="verticalLayout_6">
+           <item>
+            <widget class="QListWidget" name="activeFiltersListWidget">
+             <property name="selectionMode">
+              <enum>QAbstractItemView::ExtendedSelection</enum>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="1" column="3">
+          <layout class="QVBoxLayout" name="verticalLayout_5">
+           <item>
+            <widget class="QListWidget" name="availableFiltersListWidget">
+             <property name="selectionMode">
+              <enum>QAbstractItemView::ExtendedSelection</enum>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="1" column="4">
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <spacer name="verticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QToolButton" name="addLoadedFilterButton">
+             <property name="toolTip">
+              <string>Add filter</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="../glogg.qrc">
+               <normaloff>:/images/right.png</normaloff>:/images/right.png</iconset>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="removeLoadedFilterButton">
+             <property name="toolTip">
+              <string>Remove filter</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="../glogg.qrc">
+               <normaloff>:/images/left.png</normaloff>:/images/left.png</iconset>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer_2">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item row="0" column="5">
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>Active Filters</string>
+           </property>
+           <property name="textFormat">
+            <enum>Qt::PlainText</enum>
+           </property>
+           <property name="scaledContents">
+            <bool>false</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLabel" name="label_5">
+           <property name="text">
+            <string>Available Filters</string>
+           </property>
+           <property name="textFormat">
+            <enum>Qt::PlainText</enum>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Apply|QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>filterListWidget</tabstop>
+  <tabstop>addFilterButton</tabstop>
+  <tabstop>removeFilterButton</tabstop>
+  <tabstop>upFilterButton</tabstop>
+  <tabstop>downFilterButton</tabstop>
+  <tabstop>patternEdit</tabstop>
+  <tabstop>ignoreCaseCheckBox</tabstop>
+  <tabstop>foreColorBox</tabstop>
+  <tabstop>backColorBox</tabstop>
+  <tabstop>saveToFileButton</tabstop>
+  <tabstop>availableFiltersListWidget</tabstop>
+  <tabstop>addLoadedFilterButton</tabstop>
+  <tabstop>removeLoadedFilterButton</tabstop>
+  <tabstop>activeFiltersListWidget</tabstop>
+  <tabstop>addFilterFile</tabstop>
+  <tabstop>removeFilterFile</tabstop>
+  <tabstop>undoChangesButton</tabstop>
+  <tabstop>saveChangesButton</tabstop>
+ </tabstops>
  <resources>
   <include location="../glogg.qrc"/>
  </resources>

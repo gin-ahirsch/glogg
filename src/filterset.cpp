@@ -19,13 +19,19 @@
 
 // This file implements classes Filter and FilterSet
 
+#include <QDirIterator>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QDataStream>
+
+#include <cassert>
 
 #include "log.h"
 #include "filterset.h"
+#include "persistentinfo.h"
 
 const int FilterSet::FILTERSET_VERSION = 1;
+const int LoadedFilterSets::LOADED_FILTERSET_VERSION = 1;
 
 QRegularExpression::PatternOptions getPatternOptions( bool ignoreCase )
 {
@@ -39,7 +45,8 @@ QRegularExpression::PatternOptions getPatternOptions( bool ignoreCase )
     return options;
 }
 
-Filter::Filter()
+Filter::Filter() :
+    origin_( -1 ), loaded_offset_( -1 )
 {
 }
 
@@ -47,7 +54,8 @@ Filter::Filter(const QString& pattern, bool ignoreCase,
             const QString& foreColorName, const QString& backColorName ) :
     regexp_( pattern,  getPatternOptions( ignoreCase ) ),
     foreColorName_( foreColorName ),
-    backColorName_( backColorName ), enabled_( true )
+    backColorName_( backColorName ), enabled_( true ),
+    origin_( -1 )
 {
     LOG(logDEBUG) << "New Filter, fore: " << foreColorName_.toStdString()
         << " back: " << backColorName_.toStdString();
@@ -93,6 +101,11 @@ void Filter::setBackColor( const QString& backColorName )
     backColorName_ = backColorName;
 }
 
+void Filter::setLoadedOffset( int offset )
+{
+    loaded_offset_ = offset;
+}
+
 bool Filter::hasMatch( const QString& string ) const
 {
     return regexp_.match( string ).hasMatch();
@@ -118,6 +131,8 @@ QDataStream& operator>>( QDataStream& in, Filter& object )
     in >> object.regexp_;
     in >> object.foreColorName_;
     in >> object.backColorName_;
+    object.origin_ = -1;
+    object.loaded_offset_ = -1;
 
     return in;
 }
@@ -170,7 +185,7 @@ QDataStream& operator>>( QDataStream& in, FilterSet& object )
 // Persistable virtual functions implementation
 //
 
-void Filter::saveToStorage( QSettings& settings ) const
+void Filter::saveToStorage( QSettings& settings, bool origin ) const
 {
     LOG(logDEBUG) << "Filter::saveToStorage";
 
@@ -178,9 +193,19 @@ void Filter::saveToStorage( QSettings& settings ) const
     settings.setValue( "ignore_case", regexp_.patternOptions().testFlag( QRegularExpression::CaseInsensitiveOption ) );
     settings.setValue( "fore_colour", foreColorName_ );
     settings.setValue( "back_colour", backColorName_ );
+    if ( origin ) {
+        if ( origin_ != -1 ) {
+            auto loadedFilterSet = Persistent<LoadedFilterSets>( "loadedFilterSets" );
+            settings.setValue( "origin", loadedFilterSet->namedFilterSets[origin_].filename );
+        }
+        else {
+            settings.setValue( "origin", "" );
+        }
+        settings.setValue( "loaded_offset", loaded_offset_ );
+    }
 }
 
-void Filter::retrieveFromStorage( QSettings& settings )
+void Filter::retrieveFromStorage( QSettings& settings, int origin )
 {
     LOG(logDEBUG) << "Filter::retrieveFromStorage";
 
@@ -188,9 +213,56 @@ void Filter::retrieveFromStorage( QSettings& settings )
                        getPatternOptions( settings.value( "ignore_case", false ).toBool() ) );
     foreColorName_ = settings.value( "fore_colour" ).toString();
     backColorName_ = settings.value( "back_colour" ).toString();
+
+    auto origin_file = settings.value( "origin" , "" ).toString();
+    FilterSet *set = nullptr;
+    if ( ! origin_file.isEmpty() ) {
+        auto loadedFilterSet = Persistent<LoadedFilterSets>( "loadedFilterSets" );
+        int i = 0;
+        for( auto& namedSet : loadedFilterSet->namedFilterSets ) {
+            if ( namedSet.filename == origin_file ) {
+                origin_ = i;
+                set = &namedSet.set;
+                break;
+            }
+            ++i;
+        }
+        assert( origin >= 0 || set ); // FIXME: add a "missing"-file instead
+    }
+    else {
+        origin_ = -1;
+    }
+
+    loaded_offset_ = settings.value( "loaded_offset" , -1 ).toInt();
+
+    if ( origin >= 0 ) {
+        if ( origin_ >= 0 ) {
+            LOG(logWARNING) << "Loaded filter " << origin << ":" << regexp_.pattern().toStdString() << " with origin set to " << origin_;
+        }
+        if ( loaded_offset_ >= 0 ) {
+            LOG(logWARNING) << "Loaded filter " << origin << ":" << regexp_.pattern().toStdString() << " with loaded_offset set to " << loaded_offset_;
+            origin_ = -1;
+            loaded_offset_ = -1;
+            return;
+        }
+        origin_ = origin;
+    }
+    else if ( origin_ < 0 ) {
+        if ( loaded_offset_ >= 0 ) {
+            LOG(logWARNING) << "Loaded filter " << settings.fileName().toStdString() << ":" << regexp_.pattern().toStdString() << " with loaded_offset set to " << loaded_offset_;
+            loaded_offset_ = -1;
+        }
+    }
+    else {
+        if ( loaded_offset_ < 0 || set->size() <= loaded_offset_ ) {
+            LOG(logWARNING) << "Loaded filter " << origin << ":" << regexp_.pattern().toStdString() << " has invalid offset " << loaded_offset_;
+            origin_ = -1;
+            loaded_offset_ = -1;
+        }
+    }
 }
 
-void FilterSet::saveToStorage( QSettings& settings ) const
+void FilterSet::saveToStorage( QSettings& settings, bool origin ) const
 {
     LOG(logDEBUG) << "FilterSet::saveToStorage";
 
@@ -201,13 +273,13 @@ void FilterSet::saveToStorage( QSettings& settings ) const
     settings.beginWriteArray( "filters" );
     for (int i = 0; i < filterList.size(); ++i) {
         settings.setArrayIndex(i);
-        filterList[i].saveToStorage( settings );
+        filterList[i].saveToStorage( settings, origin );
     }
     settings.endArray();
     settings.endGroup();
 }
 
-void FilterSet::retrieveFromStorage( QSettings& settings )
+void FilterSet::retrieveFromStorage( QSettings& settings, int origin )
 {
     LOG(logDEBUG) << "FilterSet::retrieveFromStorage";
 
@@ -217,11 +289,11 @@ void FilterSet::retrieveFromStorage( QSettings& settings )
         settings.beginGroup( "FilterSet" );
         if ( settings.value( "version" ) == FILTERSET_VERSION ) {
             int size = settings.beginReadArray( "filters" );
+            filterList.reserve( size );
             for (int i = 0; i < size; ++i) {
                 settings.setArrayIndex(i);
-                Filter filter;
-                filter.retrieveFromStorage( settings );
-                filterList.append( filter );
+                filterList.push_back( {} );
+                filterList.back().retrieveFromStorage( settings, origin );
             }
             settings.endArray();
         }
@@ -243,4 +315,51 @@ void FilterSet::retrieveFromStorage( QSettings& settings )
         saveToStorage( settings );
         settings.sync();
     }
+}
+
+void LoadedFilterSets::saveToStorage( QSettings& settings ) const
+{
+    LOG(logDEBUG) << "LoadedFilterSets::saveToStorage";
+
+    settings.beginGroup( "LoadedFilterSets" );
+    // Remove everything in case the array is shorter than the previous one
+    settings.remove("");
+    settings.setValue( "version", LOADED_FILTERSET_VERSION );
+    settings.beginWriteArray( "sets" );
+    for ( std::size_t i = 0; i < namedFilterSets.size(); ++i ) {
+        settings.setArrayIndex( i );
+        settings.setValue( "filename", namedFilterSets[i].filename );
+        namedFilterSets[i].set.saveToStorage( settings, false );
+    }
+    settings.endArray();
+    settings.endGroup();
+}
+
+void LoadedFilterSets::retrieveFromStorage( QSettings& settings )
+{
+    LOG(logDEBUG) << "LoadedFilterSets::retrieveFromStorage";
+
+    namedFilterSets.clear();
+
+    settings.beginGroup( "LoadedFilterSets" );
+    if ( settings.value( "version" ) == LOADED_FILTERSET_VERSION ) {
+        int size = settings.beginReadArray( "sets" );
+        namedFilterSets.reserve( size );
+        for ( int i = 0; i < size; ++i ) {
+            settings.setArrayIndex( i );
+            namedFilterSets.emplace_back( settings.value( "filename" ).toString() );
+            auto& set = namedFilterSets.back();
+
+            set.set.retrieveFromStorage( settings, i );
+
+            QSettings settings{ set.filename, QSettings::IniFormat };
+
+            namedFilterSets.back().set.retrieveFromStorage( settings, i );
+        }
+        settings.endArray();
+    }
+    else {
+        LOG(logERROR) << "Unknown version of NamedFilterSet, ignoring it...";
+    }
+    settings.endGroup();
 }

@@ -21,11 +21,22 @@
 #define FILTERSDIALOG_H
 
 #include <memory>
+#include <vector>
 
 #include <QDialog>
+#include <QStyledItemDelegate>
 
 #include "filterset.h"
 #include "ui_filtersdialog.h"
+
+class FilterListItemDelegate : public QStyledItemDelegate
+{
+  public:
+    virtual ~FilterListItemDelegate() = default;
+
+  protected:
+    virtual void paint( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index ) const override;
+};
 
 class FiltersDialog : public QDialog, public Ui::FiltersDialog
 {
@@ -44,22 +55,60 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     void on_buttonBox_clicked( QAbstractButton* button );
     void on_upFilterButton_clicked();
     void on_downFilterButton_clicked();
+    void on_saveToFileButton_clicked();
+    void on_addFilterFile_clicked();
+    void on_removeFilterFile_clicked();
+    void on_addLoadedFilterButton_clicked();
+    void on_removeLoadedFilterButton_clicked();
     // Update the property (pattern, color...) fields from the
     // selected Filter.
     void updatePropertyFields();
     // Update the selected Filter from the values in the property fields.
     void updateFilterProperties();
+    // Update the Loaded-tab with values from a loaded filter set.
+    void updateLoadedFilterList();
 
   private:
-    // Temporary filterset modified by the dialog
-    // it is copied from the one in Config()
+    // Temporary filtersets modified by the dialog
+    // they are copied from the ones in Config()
     FilterSet filterSet;
+    LoadedFilterSets loadedFilterSets;
 
-    // Index of the row currently selected or -1 if none.
-    int selectedRow_;
+    // stores indices into various data structures for the same filter
+    struct FilterRef final
+    {
+      public:
+        FilterRef(int loaded, int filter): loaded_index(loaded), filter_index(filter) {}
+
+        bool isActive() const { return filter_index >= 0; }
+
+        int loaded_index; // index into a local filter array (Persistent( "loadedFilterSets" )->filterSetMap[filename], this->activeFilters[filter.origin()], this->activeFiltersListWidget, this->availableFiltersListWidget)
+        int filter_index; // index into this->filterSet
+        bool modified = false;
+    };
+
+    // This stores the activated filters from filter files.
+    // It is indexed by a file's origin and the index of the filter.
+    using FilterRefMap = std::vector<std::vector<FilterRef>>;
+    FilterRefMap loadedFilterRefs;
+
+    // Swap two filters in filterSet, update the FilterRefs in loadedFilterRefs and the filterListWidget.
+    void moveFilter( int from, int to );
+    // Find a FilterRef in LoadedFilterRefs.
+    FilterRef& findLoadedFilterRef( int origin, int index );
+    // Remove a filter from filterSet, LoadedFilterRefs and the corresponding widgets.
+    void removeFilter( FilterRef& filterRef );
+
+    QIcon loadedFilterIcon;
+
+    // These items all have the same lifetime, so instead of de/allocating them one-by-one we do that in one swoop in this vector.
+    std::vector<QListWidgetItem> loadedFilterItems;
 
     void populateColors();
     void populateFilterList();
+    void populateLoadedFilterList();
+
+    std::array<FilterListItemDelegate, 1> filterListItemDelegates;
 };
 
 #endif
