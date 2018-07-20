@@ -20,6 +20,7 @@
 #ifndef FILTERSDIALOG_H
 #define FILTERSDIALOG_H
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -84,6 +85,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
 
         int loaded_index; // index into a local filter array (Persistent( "loadedFilterSets" )->filterSetMap[filename], this->activeFilters[filter.origin()], this->activeFiltersListWidget, this->availableFiltersListWidget)
         int filter_index; // index into this->filterSet
+        bool modified = false;
     };
 
     // This stores the activated filters from filter files.
@@ -92,6 +94,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     FilterRefList loadedFilterRefs;
 
     QIcon loadedFilterIcon;
+    QIcon modifiedFilterIcon;
 
     // These items all have the same lifetime, so instead of de/allocating them one-by-one we do that in one swoop in this vector.
     std::vector<QListWidgetItem> loadedFilterItems;
@@ -107,7 +110,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     void populateFilterList();
     void populateLoadedFilterList();
 
-    std::array<FilterListItemDelegate, 1> filterListItemDelegates;
+    std::array<FilterListItemDelegate, 3> filterListItemDelegates;
 };
 
 #endif

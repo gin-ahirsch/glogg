@@ -63,6 +63,16 @@ class Filter
     void saveToStorage( QSettings& settings, bool origin = true ) const;
     void retrieveFromStorage( QSettings& settings, int origin = -1 );
 
+    bool operator==(const Filter& other) const { return
+           regexp_        == other.regexp_
+        && foreColorName_ == other.foreColorName_
+        && backColorName_ == other.backColorName_
+        //&& enabled_       == other.enabled_
+        //&& origin_        == other.origin_
+        ;
+    }
+    bool operator!=(const Filter& other) const { return ! ( *this == other ); }
+
   private:
     QRegularExpression regexp_;
     QString foreColorName_;
