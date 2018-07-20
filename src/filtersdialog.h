@@ -20,6 +20,7 @@
 #ifndef FILTERSDIALOG_H
 #define FILTERSDIALOG_H
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -100,6 +101,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     void removeFilter( FilterRef& filterRef );
 
     QIcon loadedFilterIcon;
+    QIcon modifiedFilterIcon;
 
     // These items all have the same lifetime, so instead of de/allocating them one-by-one we do that in one swoop in this vector.
     std::vector<QListWidgetItem> loadedFilterItems;
@@ -108,7 +110,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     void populateFilterList();
     void populateLoadedFilterList();
 
-    std::array<FilterListItemDelegate, 1> filterListItemDelegates;
+    std::array<FilterListItemDelegate, 3> filterListItemDelegates;
 };
 
 #endif

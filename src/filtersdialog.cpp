@@ -56,6 +56,16 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
     GetPersistentInfo().retrieve( *persistentLoadedFilterSet );
     loadedFilterSets = *persistentLoadedFilterSet;
 
+    // scale icons for filterListWidget
+    {
+        // This dummy must be destroyed before populating the list.
+        QListWidgetItem dummy{ filterListWidget };
+        int text_height = QFontMetrics{ dummy.font() }.height();
+        QSize icon_size{ text_height, text_height };
+        loadedFilterIcon = QIcon(":/images/filter_loaded.svg").pixmap( icon_size );
+        modifiedFilterIcon = QIcon(":/images/filter_modified.svg").pixmap( icon_size );
+    }
+
     populateColors();
     populateLoadedFilterList();
     populateFilterList();
@@ -89,14 +99,9 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
         filterListWidget->setCurrentItem( filterListWidget->item( 0 ) );
     }
 
-    // scale icons for filterListWidget
-    QListWidgetItem dummy{ filterListWidget };
-    int text_height = QFontMetrics{ dummy.font() }.height();
-    QSize icon_size{ text_height, text_height };
-    loadedFilterIcon = QIcon(":/images/filter_loaded.svg").pixmap( icon_size );
-
     filterListWidget->setItemDelegate( &filterListItemDelegates[0] );
-    activeFiltersListWidget->setItemDelegate( &filterListItemDelegates[1] );
+    loadedFilterListWidget->setItemDelegate( &filterListItemDelegates[1] );
+    activeFiltersListWidget->setItemDelegate( &filterListItemDelegates[2] );
 }
 
 FiltersDialog::FilterRef& FiltersDialog::findLoadedFilterRef( int origin, int index )
@@ -185,10 +190,25 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
     // remove from loaded filters lists
     if ( filterRef.loaded_index >= 0 ) {
         int origin = filterSet[filterRef.filter_index].origin();
+
+        bool changes = false;
+        for ( auto& ref : loadedFilterRefs[origin] ) {
+            changes |= ref.modified;
+        }
+        if ( !changes ) {
+            loadedFilterListWidget->item( origin )->setIcon( {} );
+        }
         // remove if the filter list is current selected
         if ( loadedFilterListWidget->currentRow() == origin ) {
             availableFiltersListWidget->item( filterRef.loaded_index )->setHidden( false );
-            activeFiltersListWidget->item( filterRef.loaded_index )->setHidden( true );
+            QListWidgetItem* activeItem = activeFiltersListWidget->item( filterRef.loaded_index );
+            activeItem->setIcon( {} );
+            activeItem->setHidden( true );
+
+            if ( !changes ) {
+                saveChangesButton->setEnabled( false );
+                undoChangesButton->setEnabled( false );
+            }
         }
     }
 
@@ -410,6 +430,7 @@ void FiltersDialog::updateLoadedFilterList()
 
     loadedFilterItems.reserve( filterRefs.size() * 2 ); // *2 since we have two lists
     auto* loadedFilterItemsData = loadedFilterItems.data();
+    bool changes = false;
     for( std::size_t i = 0; i < filterRefs.size(); ++i ) {
         const Filter& filter = set[i];
         const FilterRef& filterRef = filterRefs[i];
@@ -423,11 +444,18 @@ void FiltersDialog::updateLoadedFilterList()
 
         loadedFilterItems.emplace_back( *new_item );
         new_item = &loadedFilterItems.back();
+        if ( filterRef.modified ) {
+            new_item->setIcon( modifiedFilterIcon );
+            changes = true;
+        }
         activeFiltersListWidget->addItem( new_item );
         new_item->setHidden( !filterRef.isActive() );
     }
     // we really shouldn't have reallocated, since we reserve()d
     assert( loadedFilterItemsData == loadedFilterItems.data() );
+
+    saveChangesButton->setEnabled( changes );
+    undoChangesButton->setEnabled( changes );
 }
 
 void FiltersDialog::on_addLoadedFilterButton_clicked()
@@ -559,12 +587,45 @@ void FiltersDialog::updateFilterProperties()
 
         int origin = currentFilter.origin();
         if ( origin >= 0 ) {
+            auto& ref = findLoadedFilterRef( origin, selectedRow );
+            int loadedIndex = ref.loaded_index;
+            const Filter& loadedFilter = loadedFilterSets[origin].set[loadedIndex];
+
+            QListWidgetItem* loadedActiveFilterItem = nullptr;
             if ( loadedFilterListWidget->currentRow() == origin ) {
-                int loadedIndex = findLoadedFilterRef( origin, selectedRow ).loaded_index;
-                activeFiltersListWidget->item( loadedIndex )->setIcon( {} );
+                loadedActiveFilterItem = activeFiltersListWidget->item( loadedIndex );
             }
 
-            filterListWidget->currentItem()->setIcon( loadedFilterIcon );
+            const QIcon* icon = &loadedFilterIcon;
+            if ( currentFilter != loadedFilter ) {
+                ref.modified = true;
+                icon = &modifiedFilterIcon;
+                if ( loadedActiveFilterItem ) {
+                    loadedActiveFilterItem->setIcon( *icon );
+                }
+                loadedFilterListWidget->item( origin )->setIcon( modifiedFilterIcon );
+            }
+            else {
+                bool changes = false;
+                for ( auto& ref : loadedFilterRefs[origin] ) {
+                    changes |= ref.modified;
+                }
+                if ( !changes ) {
+                    loadedFilterListWidget->item( origin )->setIcon( {} );
+                }
+
+                if ( loadedActiveFilterItem ) {
+                    ref.modified = false;
+
+                    loadedActiveFilterItem->setIcon( {} );
+
+                    if ( !changes ) {
+                        saveChangesButton->setEnabled( false );
+                        undoChangesButton->setEnabled( false );
+                    }
+                }
+            }
+            filterListWidget->currentItem()->setIcon( *icon );
         }
 
         // Update the entry in the filterList widget
@@ -672,7 +733,14 @@ void FiltersDialog::populateFilterList()
 
             ref.filter_index = filterListWidget->count() - 1;
 
-            new_item->setIcon( loadedFilterIcon );
+            const QIcon* icon = &loadedFilterIcon;
+            if( list[filter.loadedOffset()] != filter ) {
+                ref.modified = true;
+                icon = &modifiedFilterIcon;
+                // We could use a QBitArray to track origins with changed filters, but setIcon() is probably not too expensive.
+                loadedFilterListWidget->item( filter.origin() )->setIcon( modifiedFilterIcon );
+            }
+            new_item->setIcon( *icon );
         }
 
     }
