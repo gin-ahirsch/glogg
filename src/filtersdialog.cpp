@@ -19,6 +19,8 @@
 
 #include "log.h"
 
+#include <utility>
+
 #include "configuration.h"
 #include "persistentinfo.h"
 #include "filterset.h"
@@ -147,19 +149,26 @@ void FiltersDialog::on_buttonBox_clicked( QAbstractButton* button )
     LOG(logDEBUG) << "on_buttonBox_clicked()";
 
     QDialogButtonBox::ButtonRole role = buttonBox->buttonRole( button );
-    if (   ( role == QDialogButtonBox::AcceptRole )
-        || ( role == QDialogButtonBox::ApplyRole ) ) {
-        // Copy the filter set and persist it to disk
-        auto persistentFilterSet = Persistent<FilterSet>( "filterSet" );
-        *persistentFilterSet = filterSet;
-        GetPersistentInfo().save( *persistentFilterSet );
-        emit optionsChanged();
+
+    if ( role == QDialogButtonBox::RejectRole ) {
+        reject();
+        return;
     }
 
-    if ( role == QDialogButtonBox::AcceptRole )
+    // persist to disk
+    auto persistentFilterSet = Persistent<FilterSet>( "filterSet" );
+    if ( role == QDialogButtonBox::AcceptRole ) {
+        *persistentFilterSet = std::move( filterSet );
         accept();
-    else if ( role == QDialogButtonBox::RejectRole )
-        reject();
+    }
+    else if ( role == QDialogButtonBox::ApplyRole ) {
+        *persistentFilterSet = filterSet;
+    }
+    else {
+        return;
+    }
+    GetPersistentInfo().save( *persistentFilterSet );
+    emit optionsChanged();
 }
 
 void FiltersDialog::updatePropertyFields()
