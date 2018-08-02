@@ -33,6 +33,11 @@
 const int FilterSet::FILTERSET_VERSION = 1;
 const int LoadedFilterSets::LOADED_FILTERSET_VERSION = 1;
 
+static const QDir& autoFilterDir() {
+    static const QDir dir{ QStandardPaths::writableLocation( QStandardPaths::AppLocalDataLocation ) + "/filters/", "*.conf", 0, QDir::Files | QDir::NoDotAndDotDot | QDir::Hidden };
+    return dir;
+}
+
 QRegularExpression::PatternOptions getPatternOptions( bool ignoreCase )
 {
     QRegularExpression::PatternOptions options =
@@ -326,10 +331,26 @@ void LoadedFilterSets::saveToStorage( QSettings& settings ) const
     settings.remove("");
     settings.setValue( "version", LOADED_FILTERSET_VERSION );
     settings.beginWriteArray( "sets" );
+    int written = 0;
     for ( std::size_t i = 0; i < namedFilterSets.size(); ++i ) {
-        settings.setArrayIndex( i );
-        settings.setValue( "filename", namedFilterSets[i].filename );
+        auto& filename = namedFilterSets[i].filename;
+        QFileInfo fileinfo{ filename };
+        if ( fileinfo.absoluteDir() == autoFilterDir().absolutePath() ) {
+            bool skip = false;
+            for ( auto& nameFilter : autoFilterDir().nameFilters() ) {
+                if( QRegExp{ nameFilter, Qt::CaseSensitive, QRegExp::Wildcard }.exactMatch( fileinfo.fileName() ) ) {
+                    skip = true;
+                    break;
+                }
+            }
+            if ( skip ) {
+                continue;
+            }
+        }
+        settings.setArrayIndex( written );
+        settings.setValue( "filename", filename );
         namedFilterSets[i].set.saveToStorage( settings, false );
+        ++written;
     }
     settings.endArray();
     settings.endGroup();
@@ -362,4 +383,14 @@ void LoadedFilterSets::retrieveFromStorage( QSettings& settings )
         LOG(logERROR) << "Unknown version of NamedFilterSet, ignoring it...";
     }
     settings.endGroup();
+
+    QDirIterator dirIter{ autoFilterDir() };
+    while( dirIter.hasNext() ) {
+        auto file = dirIter.next();
+        namedFilterSets.emplace_back( file );
+        auto& namedSet = namedFilterSets.back();
+
+        QSettings settings{ file, QSettings::IniFormat };
+        namedSet.set.retrieveFromStorage( settings, namedFilterSets.size() - 1 );
+    }
 }
