@@ -56,11 +56,12 @@ Filter::Filter() :
 }
 
 Filter::Filter(const QString& pattern, bool ignoreCase,
-            const QString& foreColorName, const QString& backColorName ) :
+            const QString& foreColorName, const QString& backColorName,
+            int origin, int loaded_offset ) :
     regexp_( pattern,  getPatternOptions( ignoreCase ) ),
     foreColorName_( foreColorName ),
     backColorName_( backColorName ), enabled_( true ),
-    origin_( -1 )
+    origin_( origin ), loaded_offset_( loaded_offset )
 {
     LOG(logDEBUG) << "New Filter, fore: " << foreColorName_.toStdString()
         << " back: " << backColorName_.toStdString();
@@ -233,27 +234,60 @@ void Filter::retrieveFromStorage( QSettings& settings, int origin )
                        getPatternOptions( settings.value( "ignore_case", false ).toBool() ) );
     foreColorName_ = settings.value( "fore_colour" ).toString();
     backColorName_ = settings.value( "back_colour" ).toString();
+    loaded_offset_ = settings.value( "loaded_offset" , -1 ).toInt();
 
     auto origin_file = settings.value( "origin" , "" ).toString();
     FilterSet *set = nullptr;
     if ( ! origin_file.isEmpty() ) {
         auto loadedFilterSet = Persistent<LoadedFilterSets>( "loadedFilterSets" );
         int i = 0;
+        bool missing = false;
         for( auto& namedSet : loadedFilterSet->namedFilterSets ) {
             if ( namedSet.filename == origin_file ) {
                 origin_ = i;
                 set = &namedSet.set;
+                missing = namedSet.missing;
                 break;
             }
             ++i;
         }
-        assert( origin >= 0 || set ); // FIXME: add a "missing"-file instead
+        if ( origin < 0 && ! set ) {
+            loadedFilterSet->namedFilterSets.emplace_back( origin_file, true );
+            auto& namedSet = loadedFilterSet->namedFilterSets.back();
+            origin_ = i;
+            set = &namedSet.set;
+
+            if ( QFile::exists( origin_file ) ) {
+                LOG(logWARNING) << "Filter file " << origin_file.toStdString() << " not loaded.";
+                QSettings missing_settings{ origin_file, QSettings::IniFormat };
+                set->retrieveFromStorage( missing_settings );
+                namedSet.missing = false;
+            }
+            else {
+                LOG(logERROR) << "Cannot find " << origin_file.toStdString() << "; adding dummy";
+                missing = true;
+            }
+        }
+        if ( missing ) {
+            assert( set );
+            if ( loaded_offset_ == -1 ) {
+                //handled below
+            }
+            else if ( set->size() <= loaded_offset_ ) {
+                set->filterList.reserve( loaded_offset_ );
+                for ( int i = set->size(); i < loaded_offset_; ++i ) {
+                    set->filterList.push_back( { "", false, "black", "black", origin_, i } );
+                }
+                set->filterList.push_back( *this );
+            }
+            else {
+                set->filterList[loaded_offset_] = *this;
+            }
+        }
     }
     else {
         origin_ = -1;
     }
-
-    loaded_offset_ = settings.value( "loaded_offset" , -1 ).toInt();
 
     if ( origin >= 0 ) {
         if ( origin_ >= 0 ) {
@@ -275,7 +309,7 @@ void Filter::retrieveFromStorage( QSettings& settings, int origin )
     }
     else {
         if ( loaded_offset_ < 0 || set->size() <= loaded_offset_ ) {
-            LOG(logWARNING) << "Loaded filter " << origin << ":" << regexp_.pattern().toStdString() << " has invalid offset " << loaded_offset_;
+            LOG(logWARNING) << "Loaded filter " << origin_ << ":" << regexp_.pattern().toStdString() << " has invalid offset " << loaded_offset_;
             origin_ = -1;
             loaded_offset_ = -1;
         }
@@ -384,13 +418,17 @@ void LoadedFilterSets::retrieveFromStorage( QSettings& settings )
         for ( int i = 0; i < size; ++i ) {
             settings.setArrayIndex( i );
             namedFilterSets.emplace_back( settings.value( "filename" ).toString() );
-            auto& set = namedFilterSets.back();
+            auto& namedSet = namedFilterSets.back();
 
-            set.set.retrieveFromStorage( settings, i );
-
-            QSettings settings{ set.filename, QSettings::IniFormat };
-
-            namedFilterSets.back().set.retrieveFromStorage( settings, i );
+            if ( QFile::exists( namedSet.filename ) ) {
+                QSettings settings{ namedSet.filename, QSettings::IniFormat };
+                // FIXME: if settings change, prompt user
+                namedSet.set.retrieveFromStorage( settings, i );
+            }
+            else {
+                namedSet.set.retrieveFromStorage( settings, i );
+                namedSet.missing = true;
+            }
         }
         settings.endArray();
     }
