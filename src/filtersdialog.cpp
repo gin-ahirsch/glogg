@@ -49,12 +49,14 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
 
     // Reload the filter list from disk (in case it has been changed
     // by another glogg instance) and copy it to here.
-    auto persistentFilterSet = Persistent<FilterSet>( "filterSet" );
-    GetPersistentInfo().retrieve( *persistentFilterSet );
-    filterSet = *persistentFilterSet;
     auto persistentLoadedFilterSet = Persistent<LoadedFilterSets>( "loadedFilterSets" );
     GetPersistentInfo().retrieve( *persistentLoadedFilterSet );
+    // Retrieving filter sets may modify loadedFilterSets in case of missing entries.
+    // Do the copy only after loading the filter sets.
+    auto persistentFilterSet = Persistent<FilterSet>( "filterSet" );
+    GetPersistentInfo().retrieve( *persistentFilterSet );
     loadedFilterSets = *persistentLoadedFilterSet;
+    filterSet = *persistentFilterSet;
 
     // scale icons for filterListWidget
     {
@@ -552,7 +554,7 @@ void FiltersDialog::updateLoadedFilterList()
     // we really shouldn't have reallocated, since we reserve()d
     assert( loadedFilterItemsData == loadedFilterItems.data() );
 
-    saveChangesButton->setEnabled( changes );
+    saveChangesButton->setEnabled( changes || namedFilterSet.missing );
     undoChangesButton->setEnabled( changes );
 }
 
@@ -851,7 +853,10 @@ void FiltersDialog::populateLoadedFilterList()
 {
     loadedFilterListWidget->clear();
     for ( const NamedFilterSet& set : loadedFilterSets ) {
-        new QListWidgetItem( set.filename, loadedFilterListWidget );
+        auto item = new QListWidgetItem( set.filename, loadedFilterListWidget );
+        if ( set.missing ) {
+            item->setBackground( Qt::red );
+        }
         loadedFilterRefs.emplace_back();
         auto& refs = loadedFilterRefs.back();
         refs.reserve(set.set.size());

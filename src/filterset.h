@@ -36,7 +36,8 @@ class Filter
     // Construct an uninitialized Filter (when reading from a config file)
     Filter();
     Filter(const QString& pattern, bool ignoreCase,
-            const QString& foreColor, const QString& backColor );
+            const QString& foreColor, const QString& backColor,
+            int origin = -1, int loaded_offset = -1 );
 
     bool hasMatch( const QString& string ) const;
 
@@ -148,11 +149,12 @@ class FilterSet : public Persistable
 struct NamedFilterSet final
 {
   public:
-    explicit NamedFilterSet( QString file ) : filename( file ) {}
+    NamedFilterSet( QString file, bool is_missing = false ) : filename( file ), missing( is_missing ) {}
 
   public:
     QString filename;
     FilterSet set;
+    bool missing;
 };
 
 class LoadedFilterSets : public Persistable
