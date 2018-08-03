@@ -630,17 +630,22 @@ void FiltersDialog::updatePropertyFields()
         ignoreCaseCheckBox->setEnabled( true );
 
         int index = foreColorBox->findText( currentFilter.foreColorName() );
-        if ( index != -1 ) {
-            LOG(logDEBUG) << "fore index = " << index;
-            foreColorBox->setCurrentIndex( index );
-            foreColorBox->setEnabled( true );
+        if ( index == -1 ) {
+            LOG(logERROR) << "Can't find color " << currentFilter.foreColorName().toStdString();
+            index = 1; // white
         }
+        LOG(logDEBUG) << "fore index = " << index;
+        foreColorBox->setCurrentIndex( index );
+        foreColorBox->setEnabled( true );
+
         index = backColorBox->findText( currentFilter.backColorName() );
-        if ( index != -1 ) {
-            LOG(logDEBUG) << "back index = " << index;
-            backColorBox->setCurrentIndex( index );
-            backColorBox->setEnabled( true );
+        if ( index == -1 ) {
+            LOG(logERROR) << "Can't find color " << currentFilter.backColorName().toStdString();
+            index = 0; // black
         }
+        LOG(logDEBUG) << "back index = " << index;
+        backColorBox->setCurrentIndex( index );
+        backColorBox->setEnabled( true );
 
         // Enable the buttons if needed
         removeFilterButton->setEnabled( true );
