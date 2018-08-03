@@ -75,6 +75,8 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
     upFilterButton->setEnabled(false);
     downFilterButton->setEnabled(false);
     saveToFileButton->setEnabled(false);
+    saveChangesButton->setEnabled(false);
+    undoChangesButton->setEnabled(false);
 
     // Default to black on white
     int index = foreColorBox->findText( DEFAULT_FORE_COLOUR );
@@ -158,6 +160,7 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
     if ( filterRef.modified ) {
         //TODO: confirm unsaved change?
     }
+    filterRef.modified = false;
 
     // remove from the filterListWidget
     // first we figure out which row to select next, if this is the last one
@@ -205,10 +208,10 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
             activeItem->setIcon( {} );
             activeItem->setHidden( true );
 
-            if ( !changes ) {
-                saveChangesButton->setEnabled( false );
-                undoChangesButton->setEnabled( false );
-            }
+             if ( !changes ) {
+                 saveChangesButton->setEnabled( false );
+                 undoChangesButton->setEnabled( false );
+             }
         }
     }
 
@@ -216,7 +219,6 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
 
     // this marks the filter as inactive
     filterRef.filter_index = -1;
-    filterRef.modified = false;
 }
 
 //
@@ -327,6 +329,59 @@ void FiltersDialog::on_saveToFileButton_clicked()
     settings.endArray();
 
     settings.endGroup();
+}
+
+void FiltersDialog::on_saveChangesButton_clicked()
+{
+    LOG(logDEBUG) << "on_saveChangesButton_clicked()";
+
+    const int row = loadedFilterListWidget->currentRow();
+    if ( row < 0 ) {
+        return;
+    }
+
+    auto& filterRefs = loadedFilterRefs[row];
+    auto& namedFilterSet = loadedFilterSets[row];
+
+    for ( auto& filterRef : filterRefs ) {
+        if ( filterRef.isActive() ) {
+            auto new_item = filterListWidget->item( filterRef.filter_index );
+            auto old_active_item = activeFiltersListWidget->item( filterRef.loaded_index ),
+                 old_available_item = availableFiltersListWidget->item( filterRef.loaded_index );
+            Filter& old_filter = namedFilterSet.set[filterRef.loaded_index];
+            Filter& new_filter = filterSet[filterRef.filter_index];
+
+            new_item->setIcon( loadedFilterIcon );
+            old_active_item->setIcon( {} );
+            old_available_item->setIcon( {} );
+            old_active_item->setText( new_filter.pattern() );
+            old_available_item->setText( new_filter.pattern() );
+            old_filter.setPattern( new_filter.pattern() );
+            old_active_item->setForeground( new_item->foreground() );
+            old_available_item->setForeground( new_item->foreground() );
+            old_filter.setForeColor( new_filter.foreColorName() );
+            old_active_item->setBackground( new_item->background() );
+            old_available_item->setBackground( new_item->background() );
+            old_filter.setBackColor( new_filter.backColorName() );
+
+            filterRef.modified = false;
+        }
+    }
+
+    QSettings settings{ loadedFilterListWidget->currentItem()->text(), QSettings::IniFormat };
+
+    settings.remove("");
+    settings.setValue( "version", FILTERFILE_VERSION );
+
+    filterSet.saveToStorage( settings, false );
+
+    for ( int i = 0; i < activeFiltersListWidget->count(); ++i ) {
+        activeFiltersListWidget->item( i )->setIcon( {} );
+    }
+
+    loadedFilterListWidget->currentItem()->setIcon( {} );
+    saveChangesButton->setEnabled( false );
+    undoChangesButton->setEnabled( false );
 }
 
 void FiltersDialog::on_addFilterFile_clicked()
@@ -599,9 +654,13 @@ void FiltersDialog::updateFilterProperties()
             const QIcon* icon = &loadedFilterIcon;
             if ( currentFilter != loadedFilter ) {
                 ref.modified = true;
+
                 icon = &modifiedFilterIcon;
                 if ( loadedActiveFilterItem ) {
                     loadedActiveFilterItem->setIcon( *icon );
+
+                    saveChangesButton->setEnabled( true );
+                    undoChangesButton->setEnabled( true );
                 }
                 loadedFilterListWidget->item( origin )->setIcon( modifiedFilterIcon );
             }
@@ -742,7 +801,6 @@ void FiltersDialog::populateFilterList()
             }
             new_item->setIcon( *icon );
         }
-
     }
 }
 
