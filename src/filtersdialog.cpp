@@ -274,9 +274,14 @@ void FiltersDialog::on_saveChangesButton_clicked()
         activeFiltersListWidget->item( i )->setIcon( {} );
     }
 
-    loadedFilterListWidget->currentItem()->setIcon( {} );
+    auto item = loadedFilterListWidget->currentItem();
+    item->setIcon( {} );
     saveChangesButton->setEnabled( false );
     undoChangesButton->setEnabled( false );
+    if ( namedFilterSet.missing ) {
+        item->setBackground( Qt::white );
+        namedFilterSet.missing = false;
+    }
 }
 
 void FiltersDialog::on_undoChangesButton_clicked()
@@ -318,7 +323,7 @@ void FiltersDialog::on_undoChangesButton_clicked()
     }
 
     loadedFilterListWidget->currentItem()->setIcon( {} );
-    saveChangesButton->setEnabled( false );
+    saveChangesButton->setEnabled( namedFilterSet.missing );
     undoChangesButton->setEnabled( false );
 }
 
@@ -532,7 +537,8 @@ void FiltersDialog::updateFilterProperties()
         if ( origin >= 0 ) {
             auto& ref = findLoadedFilterRef( origin, selectedRow );
             int loadedIndex = ref.loaded_index;
-            const Filter& loadedFilter = loadedFilterSets[origin].set[loadedIndex];
+            const auto& namedFilterSet = loadedFilterSets[origin];
+            const Filter& loadedFilter = namedFilterSet.set[loadedIndex];
 
             QListWidgetItem* loadedActiveFilterItem = nullptr;
             if ( loadedFilterListWidget->currentRow() == origin ) {
@@ -571,7 +577,7 @@ void FiltersDialog::updateFilterProperties()
                     loadedActiveFilterItem->setIcon( {} );
 
                     if ( !changes ) {
-                        saveChangesButton->setEnabled( false );
+                        saveChangesButton->setEnabled( namedFilterSet.missing );
                         undoChangesButton->setEnabled( false );
                     }
                 }
@@ -746,10 +752,11 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
             activeItem->setIcon( {} );
             activeItem->setHidden( true );
 
-             if ( !changes ) {
-                 saveChangesButton->setEnabled( false );
-                 undoChangesButton->setEnabled( false );
-             }
+            if ( !changes ) {
+                const auto& namedFilterSet = loadedFilterSets[origin];
+                saveChangesButton->setEnabled( namedFilterSet.missing );
+                undoChangesButton->setEnabled( false );
+            }
         }
     }
 
