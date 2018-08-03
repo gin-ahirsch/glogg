@@ -653,6 +653,9 @@ void FiltersDialog::updatePropertyFields()
         downFilterButton->setEnabled(
                 selectedRow < ( filterListWidget->count() - 1 ) );
         saveToFileButton->setEnabled( true );
+
+        int origin = currentFilter.origin();
+        filterOrigin->setText( origin >= 0 ? loadedFilterSets[origin].filename : "local" );
     }
     else {
         LOG(logDEBUG) << "updatePropertyFields(), row = " << ( selectedIndexes.count() > 1 ? '*' : 'X' );
