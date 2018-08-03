@@ -277,6 +277,49 @@ void FiltersDialog::on_saveChangesButton_clicked()
     undoChangesButton->setEnabled( false );
 }
 
+void FiltersDialog::on_undoChangesButton_clicked()
+{
+    LOG(logDEBUG) << "on_undoChangesButton_clicked()";
+
+    const int row = loadedFilterListWidget->currentRow();
+    if ( row < 0 ) {
+        return;
+    }
+
+    auto& filterRefs = loadedFilterRefs[row];
+    auto& namedFilterSet = loadedFilterSets[row];
+
+    for ( auto& filterRef : filterRefs ) {
+        if ( filterRef.modified ) {
+            auto new_item = filterListWidget->item( filterRef.filter_index );
+            auto old_item = availableFiltersListWidget->item( filterRef.loaded_index );
+            Filter& old_filter = namedFilterSet.set[filterRef.loaded_index];
+            Filter& new_filter = filterSet[filterRef.filter_index];
+
+            new_item->setIcon( loadedFilterIcon );
+            old_item->setIcon( {} );
+            new_item->setText( old_filter.pattern() );
+            new_filter.setPattern( old_filter.pattern() );
+            new_item->setForeground( old_item->foreground() );
+            new_filter.setForeColor( old_filter.foreColorName() );
+            new_item->setBackground( old_item->background() );
+            new_filter.setBackColor( old_filter.backColorName() );
+
+            filterRef.modified = false;
+        }
+    }
+
+    updatePropertyFields();
+
+    for ( int i = 0; i < activeFiltersListWidget->count(); ++i ) {
+        activeFiltersListWidget->item( i )->setIcon( {} );
+    }
+
+    loadedFilterListWidget->currentItem()->setIcon( {} );
+    saveChangesButton->setEnabled( false );
+    undoChangesButton->setEnabled( false );
+}
+
 void FiltersDialog::on_addFilterFile_clicked()
 {
     LOG(logDEBUG) << "on_addFilterFile_clicked()";
