@@ -102,6 +102,14 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     // Remove a filter from filterSet, LoadedFilterRefs and the corresponding widgets.
     void removeFilter( FilterRef& filterRef );
 
+    // Write the Filter as in filterSet to the corresponding Filter in loadedFilterSets.
+    // Also updates the QListWidgetItems for the Filters (not loadedFilterListWidget).
+    void adoptChanges( FilterRef& ref );
+    // Save a NamedFilterSet to file.
+    // The NamedFilterSet must be a loaded FilterSet (i.e. present in loadedFilterSets).
+    // Also updates the associated UI elements.
+    void saveChanges( NamedFilterSet& namedFilterSet );
+
     QIcon loadedFilterIcon;
     QIcon modifiedFilterIcon;
 
