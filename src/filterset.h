@@ -144,6 +144,7 @@ class FilterSet : public Persistable
     // internal structure directly.
     friend class FiltersDialog;
     friend class Filter;
+    friend class LoadedFilterSets;
 };
 
 struct NamedFilterSet final

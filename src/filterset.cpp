@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QDataStream>
+#include <QMessageBox>
 
 #include <cassert>
 
@@ -395,6 +396,8 @@ void LoadedFilterSets::retrieveFromStorage( QSettings& settings )
     LOG(logDEBUG) << "LoadedFilterSets::retrieveFromStorage";
 
     namedFilterSets.clear();
+    // Write out settings if we reload a filter file.
+    bool sync = false;
 
     settings.beginGroup( "LoadedFilterSets" );
     if ( settings.value( "version" ) == LOADED_FILTERSET_VERSION ) {
@@ -404,14 +407,22 @@ void LoadedFilterSets::retrieveFromStorage( QSettings& settings )
             settings.setArrayIndex( i );
             namedFilterSets.emplace_back( settings.value( "filename" ).toString() );
             auto& namedSet = namedFilterSets.back();
+            namedSet.set.retrieveFromStorage( settings, i );
 
             if ( QFile::exists( namedSet.filename ) ) {
                 QSettings settings{ namedSet.filename, QSettings::IniFormat };
-                // FIXME: if settings change, prompt user
-                namedSet.set.retrieveFromStorage( settings, i );
+                FilterSet actual;
+                actual.retrieveFromStorage( settings, i );
+
+                if ( actual.filterList != namedSet.set.filterList ) {
+                    auto reply = QMessageBox::question( nullptr, "Filter file has changed", "The filter file " + namedSet.filename + " has changed.\nReload?", QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes );
+                    if ( reply == QMessageBox::Yes ) {
+                        namedSet.set = std::move( actual );
+                        sync = true;
+                    }
+                }
             }
             else {
-                namedSet.set.retrieveFromStorage( settings, i );
                 namedSet.missing = true;
             }
         }
@@ -421,6 +432,10 @@ void LoadedFilterSets::retrieveFromStorage( QSettings& settings )
         LOG(logERROR) << "Unknown version of NamedFilterSet, ignoring it...";
     }
     settings.endGroup();
+
+    if ( sync ) {
+        saveToStorage( settings );
+    }
 
     QDirIterator dirIter{ autoFilterDir() };
     while( dirIter.hasNext() ) {
