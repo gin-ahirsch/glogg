@@ -21,8 +21,11 @@
 
 #include <cassert>
 #include <utility>
-#include <QFileDialog>
+#include <QBitArray>
 #include <QDir>
+#include <QFileDialog>
+#include <QMessageBox>
+
 #include "configuration.h"
 #include "persistentinfo.h"
 #include "filterset.h"
@@ -35,6 +38,12 @@ void FilterListItemDelegate::paint( QPainter* painter, const QStyleOptionViewIte
     myOption.decorationPosition = QStyleOptionViewItem::Right;
     QStyledItemDelegate::paint( painter, myOption, index );
 }
+
+static QMessageBox::StandardButton askSaveFilters()
+{
+    return QMessageBox::question( nullptr, "Filters have changed", "Save the changes to the filters?", QMessageBox::Yes | QMessageBox::No | QMessageBox::Abort, QMessageBox::Abort );
+}
+
 
 static const QString DEFAULT_PATTERN = "New Filter";
 static const bool    DEFAULT_IGNORE_CASE = false;
@@ -127,10 +136,45 @@ void FiltersDialog::on_addFilterButton_clicked()
 
 void FiltersDialog::on_removeFilterButton_clicked()
 {
+    bool doSave = false;
+    QBitArray saveOrigins{ static_cast<int>( loadedFilterSets.size() ) };
+
     foreach ( const QListWidgetItem* item, filterListWidget->selectedItems() ) {
         int index = filterListWidget->row( item );
         LOG(logDEBUG) << "on_removeFilterButton_clicked() index " << index;
 
+        int origin = filterSet[index].origin();
+        if ( origin < 0 ) {
+            continue;
+        }
+
+        FilterRef& ref = findLoadedFilterRef( origin, index );
+        if ( ref.modified ) {
+            if ( ! doSave ) {
+                auto reply = askSaveFilters();
+                if ( reply == QMessageBox::Abort ) {
+                    return;
+                }
+                if ( reply == QMessageBox::No ) {
+                    break;
+                }
+            }
+            doSave = true;
+            saveOrigins.setBit( origin );
+            adoptChanges( ref );
+        }
+    }
+
+    if ( doSave ) {
+        for ( int i = 0; i < static_cast<int>( loadedFilterSets.size() ); ++i ) {
+            if ( saveOrigins.testBit( i ) ) {
+                saveChanges( loadedFilterSets[i] );
+            }
+        }
+    }
+
+    foreach ( const QListWidgetItem* item, filterListWidget->selectedItems() ) {
+        int index = filterListWidget->row( item );
         const Filter& filter = filterSet[index];
         if ( filter.origin() < 0 ) {
             FilterRef dummy{ -1, index };
@@ -239,49 +283,12 @@ void FiltersDialog::on_saveChangesButton_clicked()
     auto& namedFilterSet = loadedFilterSets[row];
 
     for ( auto& filterRef : filterRefs ) {
-        if ( filterRef.isActive() ) {
-            auto new_item = filterListWidget->item( filterRef.filter_index );
-            auto old_active_item = activeFiltersListWidget->item( filterRef.loaded_index ),
-                 old_available_item = availableFiltersListWidget->item( filterRef.loaded_index );
-            Filter& old_filter = namedFilterSet.set[filterRef.loaded_index];
-            Filter& new_filter = filterSet[filterRef.filter_index];
-
-            new_item->setIcon( loadedFilterIcon );
-            old_active_item->setIcon( {} );
-            old_available_item->setIcon( {} );
-            old_active_item->setText( new_filter.pattern() );
-            old_available_item->setText( new_filter.pattern() );
-            old_filter.setPattern( new_filter.pattern() );
-            old_active_item->setForeground( new_item->foreground() );
-            old_available_item->setForeground( new_item->foreground() );
-            old_filter.setForeColor( new_filter.foreColorName() );
-            old_active_item->setBackground( new_item->background() );
-            old_available_item->setBackground( new_item->background() );
-            old_filter.setBackColor( new_filter.backColorName() );
-
-            filterRef.modified = false;
+        if ( filterRef.modified ) {
+            adoptChanges( filterRef );
         }
     }
-
-    QSettings settings{ loadedFilterListWidget->currentItem()->text(), QSettings::IniFormat };
-
-    settings.remove("");
-    settings.setValue( "version", FILTERFILE_VERSION );
-
-    filterSet.saveToStorage( settings, false );
-
-    for ( int i = 0; i < activeFiltersListWidget->count(); ++i ) {
-        activeFiltersListWidget->item( i )->setIcon( {} );
-    }
-
-    auto item = loadedFilterListWidget->currentItem();
-    item->setIcon( {} );
-    saveChangesButton->setEnabled( false );
-    undoChangesButton->setEnabled( false );
-    if ( namedFilterSet.missing ) {
-        item->setBackground( Qt::white );
-        namedFilterSet.missing = false;
-    }
+    assert( loadedFilterListWidget->currentItem()->text() == namedFilterSet.filename );
+    saveChanges( namedFilterSet );
 }
 
 void FiltersDialog::on_undoChangesButton_clicked()
@@ -383,6 +390,27 @@ void FiltersDialog::on_removeFilterFile_clicked()
     }
     auto& filterRefs = loadedFilterRefs[row];
 
+    bool doSave = false;
+    for ( auto& filterRef : filterRefs ) {
+        if ( filterRef.modified ) {
+            if ( ! doSave ) {
+                auto reply = askSaveFilters();
+                if ( reply == QMessageBox::Abort ) {
+                    return;
+                }
+                if ( reply == QMessageBox::No ) {
+                    break;
+                }
+            }
+            doSave = true;
+            adoptChanges( filterRef );
+        }
+    }
+
+    if ( doSave ) {
+        saveChanges( loadedFilterSets[row] );
+    }
+
     for ( auto& filterRef : filterRefs ) {
         if ( filterRef.isActive() ) {
             removeFilter( filterRef );
@@ -445,10 +473,32 @@ void FiltersDialog::on_removeLoadedFilterButton_clicked()
     assert ( origin >= 0 );
     auto& refs = loadedFilterRefs[origin];
 
+    bool doSave = false;
     foreach ( const QListWidgetItem* item, activeFiltersListWidget->selectedItems() ) {
         int index = activeFiltersListWidget->row( item );
         LOG(logDEBUG) << "on_addLoadedFilterButton_clicked() index " << index;
 
+        if ( refs[index].modified ) {
+            if ( ! doSave ) {
+                auto reply = askSaveFilters();
+                if ( reply == QMessageBox::Abort ) {
+                    return;
+                }
+                if ( reply == QMessageBox::No ) {
+                    break;
+                }
+            }
+            doSave = true;
+            adoptChanges( refs[index] );
+        }
+    }
+
+    if ( doSave ) {
+        saveChanges( loadedFilterSets[origin] );
+    }
+
+    foreach ( const QListWidgetItem* item, activeFiltersListWidget->selectedItems() ) {
+        int index = activeFiltersListWidget->row( item );
         removeFilter( refs[index] );
     }
     updatePropertyFields();
@@ -709,9 +759,6 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
 {
     assert( filterRef.isActive() );
 
-    if ( filterRef.modified ) {
-        //TODO: confirm unsaved change?
-    }
     filterRef.modified = false;
 
     // remove from the filterListWidget
@@ -774,6 +821,68 @@ void FiltersDialog::removeFilter( FilterRef& filterRef )
 
     // this marks the filter as inactive
     filterRef.filter_index = -1;
+}
+
+void FiltersDialog::adoptChanges( FilterRef& ref )
+{
+    assert( ref.isActive() );
+
+    Filter& new_filter = filterSet[ref.filter_index];
+    assert( new_filter.origin() >= 0 );
+    Filter& old_filter = loadedFilterSets[new_filter.origin()].set[ref.loaded_index];
+    auto new_item = filterListWidget->item( ref.filter_index );
+
+    new_item->setIcon( loadedFilterIcon );
+    old_filter.setPattern( new_filter.pattern() );
+    old_filter.setForeColor( new_filter.foreColorName() );
+    old_filter.setBackColor( new_filter.backColorName() );
+
+    if ( loadedFilterListWidget->currentRow() == new_filter.origin() ) {
+        auto old_active_item = activeFiltersListWidget->item( ref.loaded_index ),
+             old_loaded_item = availableFiltersListWidget->item( ref.loaded_index );
+        old_active_item->setIcon( {} );
+        old_loaded_item->setIcon( {} );
+        old_active_item->setText( new_filter.pattern() );
+        old_loaded_item->setText( new_filter.pattern() );
+        old_active_item->setForeground( new_item->foreground() );
+        old_loaded_item->setForeground( new_item->foreground() );
+        old_active_item->setBackground( new_item->background() );
+        old_loaded_item->setBackground( new_item->background() );
+    }
+
+    ref.modified = false;
+}
+
+void FiltersDialog::saveChanges( NamedFilterSet& namedFilterSet )
+{
+    const auto& filterSet = namedFilterSet.set;
+    QSettings settings{ namedFilterSet.filename, QSettings::IniFormat };
+
+    settings.remove( "" );
+    settings.setValue( "version", FILTERFILE_VERSION );
+
+    filterSet.saveToStorage( settings, false );
+
+    if ( namedFilterSet.set.empty() ) {
+        return;
+    }
+    int origin = namedFilterSet.set.front().origin();
+    assert( origin >= 0 );
+
+    if ( loadedFilterListWidget->currentRow() == origin ) {
+        for ( int i = 0; i < activeFiltersListWidget->count(); ++i ) {
+            activeFiltersListWidget->item( i )->setIcon( {} );
+        }
+    }
+
+    auto item = loadedFilterListWidget->item( origin );
+    item->setIcon( {} );
+    saveChangesButton->setEnabled( false );
+    undoChangesButton->setEnabled( false );
+    if ( namedFilterSet.missing ) {
+        item->setBackground( Qt::white );
+        namedFilterSet.missing = false;
+    }
 }
 
 // Fills the color selection combo boxes
