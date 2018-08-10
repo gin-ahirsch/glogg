@@ -57,6 +57,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     void on_upFilterButton_clicked();
     void on_downFilterButton_clicked();
     void on_saveToFileButton_clicked();
+    void on_adoptChangesButton_clicked();
     void on_saveChangesButton_clicked();
     void on_undoChangesButton_clicked();
     void on_addFilterFile_clicked();

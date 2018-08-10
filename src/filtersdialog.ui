@@ -170,10 +170,40 @@
              </property>
             </widget>
            </item>
-           <item row="6" column="0">
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_5">
+           <item>
             <widget class="QPushButton" name="saveToFileButton">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
              <property name="text">
               <string>Save to File</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_3">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="adoptChangesButton">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Adopt changes</string>
              </property>
             </widget>
            </item>
@@ -418,6 +448,7 @@
   <tabstop>foreColorBox</tabstop>
   <tabstop>backColorBox</tabstop>
   <tabstop>saveToFileButton</tabstop>
+  <tabstop>adoptChangesButton</tabstop>
   <tabstop>availableFiltersListWidget</tabstop>
   <tabstop>addLoadedFilterButton</tabstop>
   <tabstop>removeLoadedFilterButton</tabstop>

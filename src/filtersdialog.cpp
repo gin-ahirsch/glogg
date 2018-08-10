@@ -270,6 +270,27 @@ void FiltersDialog::on_saveToFileButton_clicked()
     settings.endGroup();
 }
 
+void FiltersDialog::on_adoptChangesButton_clicked()
+{
+    LOG(logDEBUG) << "on_adoptChangesButton_clicked()";
+
+    QBitArray saveOrigins{ static_cast<int>( loadedFilterSets.size() ) };
+
+    const auto& selectedIndexes = filterListWidget->selectionModel()->selectedIndexes();
+    for ( const auto& index : selectedIndexes ) {
+        int row = index.row();
+        int origin = filterSet[row].origin();
+        saveOrigins.setBit( origin );
+        adoptChanges( findLoadedFilterRef( origin, row ) );
+    }
+
+    for ( int i = 0; i < static_cast<int>( loadedFilterSets.size() ); ++i ) {
+        if ( saveOrigins.testBit( i ) ) {
+            saveChanges( loadedFilterSets[i] );
+        }
+    }
+}
+
 void FiltersDialog::on_saveChangesButton_clicked()
 {
     LOG(logDEBUG) << "on_saveChangesButton_clicked()";
@@ -547,7 +568,14 @@ void FiltersDialog::updatePropertyFields()
         saveToFileButton->setEnabled( true );
 
         int origin = currentFilter.origin();
-        filterOrigin->setText( origin >= 0 ? loadedFilterSets[origin].filename : "local" );
+        if ( origin >= 0 ) {
+            adoptChangesButton->setEnabled( findLoadedFilterRef( origin, selectedRow ).modified );
+            filterOrigin->setText( loadedFilterSets[origin].filename );
+        }
+        else {
+            adoptChangesButton->setEnabled( false );
+            filterOrigin->setText( "local" );
+        }
     }
     else {
         LOG(logDEBUG) << "updatePropertyFields(), row = " << ( selectedIndexes.count() > 1 ? '*' : 'X' );
@@ -569,6 +597,7 @@ void FiltersDialog::updatePropertyFields()
         upFilterButton->setEnabled( false );
         downFilterButton->setEnabled( false );
         saveToFileButton->setEnabled( selectedIndexes.count() != 0 );
+        adoptChangesButton->setEnabled( false );
 
         filterOrigin->setText( "" );
 
