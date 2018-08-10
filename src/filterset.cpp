@@ -217,11 +217,11 @@ void FilterSet::retrieveFromStorage( QSettings& settings )
         settings.beginGroup( "FilterSet" );
         if ( settings.value( "version" ) == FILTERSET_VERSION ) {
             int size = settings.beginReadArray( "filters" );
+            filterList.reserve( size );
             for (int i = 0; i < size; ++i) {
                 settings.setArrayIndex(i);
-                Filter filter;
-                filter.retrieveFromStorage( settings );
-                filterList.append( filter );
+                filterList.push_back( {} );
+                filterList.back().retrieveFromStorage( settings );
             }
             settings.endArray();
         }
