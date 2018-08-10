@@ -72,7 +72,7 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
     connect( backColorBox, SIGNAL( activated( int ) ),
             this, SLOT( updateFilterProperties() ) );
 
-    if ( !filterSet.filterList.empty() ) {
+    if ( !filterSet.empty() ) {
         filterListWidget->setCurrentItem( filterListWidget->item( 0 ) );
     }
 }
@@ -182,7 +182,7 @@ void FiltersDialog::updatePropertyFields()
     LOG(logDEBUG) << "updatePropertyFields(), row = " << selectedRow_;
 
     if ( selectedRow_ >= 0 ) {
-        const Filter& currentFilter = filterSet.filterList.at( selectedRow_ );
+        const Filter& currentFilter = filterSet[selectedRow_];
 
         patternEdit->setText( currentFilter.pattern() );
         patternEdit->setEnabled( true );
@@ -236,7 +236,7 @@ void FiltersDialog::updateFilterProperties()
 
     // If a row is selected
     if ( selectedRow_ >= 0 ) {
-        Filter& currentFilter = filterSet.filterList[selectedRow_];
+        Filter& currentFilter = filterSet[selectedRow_];
 
         // Update the internal data
         currentFilter.setPattern( patternEdit->text() );
@@ -322,7 +322,8 @@ void FiltersDialog::populateColors()
 void FiltersDialog::populateFilterList()
 {
     filterListWidget->clear();
-    foreach ( Filter filter, filterSet.filterList ) {
+
+    for ( const Filter& filter : filterSet ) {
         QListWidgetItem* new_item = new QListWidgetItem( filter.pattern() );
         // new_item->setFlags( Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsEnabled );
         new_item->setForeground( QBrush( QColor( filter.foreColorName() ) ) );

@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QColor>
 #include <QMetaType>
+#include <QVector>
 
 #include "persistable.h"
 
@@ -71,6 +72,13 @@ class FilterSet : public Persistable
     using FilterList = QList<Filter>;
 
   public:
+    using iterator = FilterList::iterator;
+    using const_iterator = FilterList::const_iterator;
+    using reference = FilterList::reference;
+    using const_reference = FilterList::const_reference;
+    using size_type = FilterList::size_type;
+
+  public:
     // Construct an empty filter set
     FilterSet();
 
@@ -90,6 +98,23 @@ class FilterSet : public Persistable
             QDataStream& out, const FilterSet& object );
     friend QDataStream& operator>>(
             QDataStream& in, FilterSet& object );
+
+  private:
+    reference& operator[]( int index ) { return filterList[index]; }
+    const_reference& operator[]( int index ) const { return filterList[index]; }
+
+    reference& front() { return filterList.front(); }
+    const_reference& front() const { return filterList.front(); }
+    reference& back() { return filterList.back(); }
+    const_reference& back() const { return filterList.back(); }
+
+    iterator begin() { using std::begin; return begin( filterList ); }
+    iterator end() { using std::end; return end( filterList ); }
+    const_iterator cbegin() const { using std::begin; return begin( filterList ); }
+    const_iterator cend() const { using std::end; return end( filterList ); }
+
+    size_type size() const { return filterList.size(); }
+    bool empty() const { return filterList.empty(); }
 
   private:
     static const int FILTERSET_VERSION;
