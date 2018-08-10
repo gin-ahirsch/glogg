@@ -24,9 +24,19 @@
 #include <vector>
 
 #include <QDialog>
+#include <QStyledItemDelegate>
 
 #include "filterset.h"
 #include "ui_filtersdialog.h"
+
+class FilterListItemDelegate : public QStyledItemDelegate
+{
+  public:
+    virtual ~FilterListItemDelegate() = default;
+
+  protected:
+    virtual void paint( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index ) const override;
+};
 
 class FiltersDialog : public QDialog, public Ui::FiltersDialog
 {
@@ -81,6 +91,8 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     using FilterRefList = std::vector<std::vector<FilterRef>>;
     FilterRefList loadedFilterRefs;
 
+    QIcon loadedFilterIcon;
+
     // These items all have the same lifetime, so instead of de/allocating them one-by-one we do that in one swoop in this vector.
     std::vector<QListWidgetItem> loadedFilterItems;
 
@@ -95,6 +107,7 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     void populateFilterList();
     void populateLoadedFilterList();
 
+    std::array<FilterListItemDelegate, 1> filterListItemDelegates;
 };
 
 #endif

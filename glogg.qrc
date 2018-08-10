@@ -24,5 +24,6 @@
     <file>images/arrowdown.png</file>
     <file>images/arrowup.png</file>
     <file>images/darkclosebutton.png</file>
+    <file>images/filter_loaded.svg</file>
 </qresource>
 </RCC>

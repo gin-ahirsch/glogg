@@ -29,6 +29,13 @@
 
 #include "filtersdialog.h"
 
+void FilterListItemDelegate::paint( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index ) const
+{
+    auto myOption = option;
+    myOption.decorationPosition = QStyleOptionViewItem::Right;
+    QStyledItemDelegate::paint( painter, myOption, index );
+}
+
 static const QString DEFAULT_PATTERN = "New Filter";
 static const bool    DEFAULT_IGNORE_CASE = false;
 static const QString DEFAULT_FORE_COLOUR = "black";
@@ -81,6 +88,15 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
     if ( !filterSet.empty() ) {
         filterListWidget->setCurrentItem( filterListWidget->item( 0 ) );
     }
+
+    // scale icons for filterListWidget
+    QListWidgetItem dummy{ filterListWidget };
+    int text_height = QFontMetrics{ dummy.font() }.height();
+    QSize icon_size{ text_height, text_height };
+    loadedFilterIcon = QIcon(":/images/filter_loaded.svg").pixmap( icon_size );
+
+    filterListWidget->setItemDelegate( &filterListItemDelegates[0] );
+    activeFiltersListWidget->setItemDelegate( &filterListItemDelegates[1] );
 }
 
 //
@@ -292,6 +308,7 @@ void FiltersDialog::on_addLoadedFilterButton_clicked()
         LOG(logDEBUG) << "on_addLoadedFilterButton_clicked() index " << row;
 
         auto filterItem = item->clone();
+        filterItem->setIcon( loadedFilterIcon );
         filterListWidget->addItem( filterItem );
 
         item->setHidden( true );
@@ -405,6 +422,16 @@ void FiltersDialog::updateFilterProperties()
         currentFilter.setIgnoreCase( ignoreCaseCheckBox->isChecked() );
         currentFilter.setForeColor( foreColorBox->currentText() );
         currentFilter.setBackColor( backColorBox->currentText() );
+
+        int origin = currentFilter.origin();
+        if ( origin >= 0 ) {
+            if ( loadedFilterListWidget->currentRow() == origin ) {
+                int loadedIndex = findLoadedFilterRef( origin, selectedRow ).loaded_index;
+                activeFiltersListWidget->item( loadedIndex )->setIcon( {} );
+            }
+
+            filterListWidget->currentItem()->setIcon( loadedFilterIcon );
+        }
 
         // Update the entry in the filterList widget
         filterListWidget->currentItem()->setText( patternEdit->text() );
@@ -647,6 +674,8 @@ void FiltersDialog::populateFilterList()
             auto& ref = refs[filter.loadedOffset()];
 
             ref.filter_index = filterListWidget->count() - 1;
+
+            new_item->setIcon( loadedFilterIcon );
         }
 
     }
