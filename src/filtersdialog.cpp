@@ -19,8 +19,10 @@
 
 #include "log.h"
 
+#include <cassert>
 #include <utility>
-
+#include <QFileDialog>
+#include <QDir>
 #include "configuration.h"
 #include "persistentinfo.h"
 #include "filterset.h"
@@ -43,14 +45,19 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
     auto persistentFilterSet = Persistent<FilterSet>( "filterSet" );
     GetPersistentInfo().retrieve( *persistentFilterSet );
     filterSet = *persistentFilterSet;
+    auto persistentLoadedFilterSet = Persistent<LoadedFilterSets>( "loadedFilterSets" );
+    GetPersistentInfo().retrieve( *persistentLoadedFilterSet );
+    loadedFilterSets = *persistentLoadedFilterSet;
 
     populateColors();
+    populateLoadedFilterList();
     populateFilterList();
 
     // Start with all buttons disabled except 'add'
     removeFilterButton->setEnabled(false);
     upFilterButton->setEnabled(false);
     downFilterButton->setEnabled(false);
+    saveToFileButton->setEnabled(false);
 
     // Default to black on white
     int index = foreColorBox->findText( DEFAULT_FORE_COLOUR );
@@ -58,11 +65,10 @@ FiltersDialog::FiltersDialog( QWidget* parent ) : QDialog( parent )
     index = backColorBox->findText( DEFAULT_BACK_COLOUR );
     backColorBox->setCurrentIndex( index );
 
-    // No filter selected by default
-    selectedRow_ = -1;
-
     connect( filterListWidget, SIGNAL( itemSelectionChanged() ),
             this, SLOT( updatePropertyFields() ) );
+    connect( loadedFilterListWidget, SIGNAL( itemSelectionChanged() ),
+            this, SLOT( updateLoadedFilterList() ) );
     connect( patternEdit, SIGNAL( textEdited( const QString& ) ),
             this, SLOT( updateFilterProperties() ) );
     connect( ignoreCaseCheckBox, SIGNAL( clicked( bool ) ),
@@ -91,29 +97,25 @@ void FiltersDialog::on_addFilterButton_clicked()
 
     // Add and select the newly created filter
     filterListWidget->addItem( DEFAULT_PATTERN );
-    filterListWidget->setCurrentRow( filterListWidget->count() - 1 );
+    filterListWidget->setCurrentRow( filterListWidget->count() - 1, QItemSelectionModel::ClearAndSelect );
 }
 
 void FiltersDialog::on_removeFilterButton_clicked()
 {
-    int index = filterListWidget->currentRow();
-    LOG(logDEBUG) << "on_removeFilterButton_clicked() index " << index;
+    foreach ( const QListWidgetItem* item, filterListWidget->selectedItems() ) {
+        int index = filterListWidget->row( item );
+        LOG(logDEBUG) << "on_removeFilterButton_clicked() index " << index;
 
-    if ( index >= 0 ) {
-        filterSet.filterList.removeAt( index );
-        filterListWidget->setCurrentRow( -1 );
-        delete filterListWidget->takeItem( index );
-
-        int count = filterListWidget->count();
-        if ( index < count ) {
-            // Select the new item at the same index
-            filterListWidget->setCurrentRow( index );
+        const Filter& filter = filterSet[index];
+        if ( filter.origin() < 0 ) {
+            FilterRef dummy{ -1, index };
+            removeFilter( dummy );
         }
         else {
-            // or the previous index if it is at the end
-            filterListWidget->setCurrentRow( count - 1 );
+            removeFilter( findLoadedFilterRef( filter.origin(), index ) );
         }
     }
+    updatePropertyFields();
 }
 
 void FiltersDialog::on_upFilterButton_clicked()
@@ -148,19 +150,181 @@ void FiltersDialog::on_buttonBox_clicked( QAbstractButton* button )
     }
 
     // persist to disk
+    auto persistentLoadedFilterSet = Persistent<LoadedFilterSets>( "loadedFilterSets" );
     auto persistentFilterSet = Persistent<FilterSet>( "filterSet" );
     if ( role == QDialogButtonBox::AcceptRole ) {
+        *persistentLoadedFilterSet = std::move( loadedFilterSets );
         *persistentFilterSet = std::move( filterSet );
         accept();
     }
     else if ( role == QDialogButtonBox::ApplyRole ) {
+        *persistentLoadedFilterSet = loadedFilterSets;
         *persistentFilterSet = filterSet;
     }
     else {
         return;
     }
+    GetPersistentInfo().save( *persistentLoadedFilterSet );
     GetPersistentInfo().save( *persistentFilterSet );
     emit optionsChanged();
+}
+
+static const int FILTERFILE_VERSION = 1;
+
+void FiltersDialog::on_saveToFileButton_clicked()
+{
+    LOG(logDEBUG) << "on_saveToFileButton_clicked()";
+
+    auto selectedItems = filterListWidget->selectedItems();
+
+    QString filename = QFileDialog::getSaveFileName(this,
+            tr("Save Filters"), QDir::home().path(), tr("Filter files (*.conf)"));
+
+    QSettings settings{ filename, QSettings::IniFormat };
+
+    settings.remove("");
+    settings.setValue( "version", FILTERFILE_VERSION );
+
+    settings.beginGroup( "FilterSet" );
+    settings.setValue( "version", FilterSet::FILTERSET_VERSION );
+
+    settings.beginWriteArray( "filters" );
+    for (int i = 0; i < selectedItems.size(); ++i) {
+        auto selectedItem = selectedItems.at( i );
+        int selectedRow = filterListWidget->row( selectedItem );
+
+        settings.setArrayIndex( i );
+        filterSet[selectedRow].saveToStorage( settings, false );
+    }
+    settings.endArray();
+
+    settings.endGroup();
+}
+
+void FiltersDialog::on_addFilterFile_clicked()
+{
+    LOG(logDEBUG) << "on_addFilterFile_clicked()";
+
+    QString filename = QFileDialog::getOpenFileName(this,
+            tr("Load Filters"), QDir::home().path(), tr("Filter files (*.conf)"));
+
+    QSettings settings{ filename, QSettings::IniFormat };
+    if ( settings.contains( "version" ) ) {
+        if ( settings.value( "version" ) == FILTERFILE_VERSION ) {
+            auto& namedSets = loadedFilterSets.namedFilterSets;
+            int new_origin = namedSets.size();
+            assert( loadedFilterListWidget->count() == new_origin );
+            assert( static_cast<int>( loadedFilterRefs.size() ) == new_origin );
+            namedSets.emplace_back( filename );
+            auto& namedSet = namedSets.back();
+
+            FilterSet& set = namedSet.set;
+            set.retrieveFromStorage( settings, new_origin );
+
+            loadedFilterListWidget->addItem( new QListWidgetItem( filename ) );
+            loadedFilterRefs.push_back( {} );
+            auto& filterRefs = loadedFilterRefs.back();
+            filterRefs.reserve( set.size() );
+
+            for( int i = 0; i < set.size(); ++i ) {
+                filterRefs.push_back( { i, -1 } );
+            }
+
+            loadedFilterListWidget->setCurrentRow( new_origin );
+            updateLoadedFilterList();
+        }
+        else {
+            //FIXME: popup
+            LOG(logERROR) << "Unknown version of FilterFile, ignoring it...";
+        }
+    }
+    else {
+        //FIXME: popup
+        LOG(logERROR) << "Invalid FilterFile format, ignoring it...";
+    }
+}
+
+void FiltersDialog::on_removeFilterFile_clicked()
+{
+    using std::begin;
+    using std::next;
+
+    LOG(logDEBUG) << "on_removeFilterFile_clicked()";
+
+    const int row = loadedFilterListWidget->currentRow();
+    if ( row < 0 ) {
+        return;
+    }
+    auto& filterRefs = loadedFilterRefs[row];
+
+    for ( auto& filterRef : filterRefs ) {
+        if ( filterRef.isActive() ) {
+            removeFilter( filterRef );
+        }
+    }
+
+    loadedFilterListWidget->setCurrentRow( -1 );
+    delete loadedFilterListWidget->item( row );
+    if ( loadedFilterListWidget->count() > row ) {
+        loadedFilterListWidget->setCurrentRow( row );
+    }
+    else {
+        loadedFilterListWidget->setCurrentRow( loadedFilterListWidget->count() - 1 );
+    }
+    if ( loadedFilterListWidget->currentRow() >= 0 ) {
+        updateLoadedFilterList();
+    }
+
+    loadedFilterSets.namedFilterSets.erase( next( begin( loadedFilterSets.namedFilterSets ), row ) );
+    loadedFilterRefs.erase( next( begin( loadedFilterRefs ), row ) );
+    updatePropertyFields();
+}
+
+void FiltersDialog::on_addLoadedFilterButton_clicked()
+{
+    const int origin = loadedFilterListWidget->currentRow();
+    assert ( origin >= 0 );
+    auto& refs = loadedFilterRefs[origin];
+    const auto& set = loadedFilterSets[origin].set;
+
+    foreach ( QListWidgetItem* item, availableFiltersListWidget->selectedItems() ) {
+        int row = availableFiltersListWidget->row( item );
+        LOG(logDEBUG) << "on_addLoadedFilterButton_clicked() index " << row;
+
+        auto filterItem = item->clone();
+        filterListWidget->addItem( filterItem );
+
+        item->setHidden( true );
+        activeFiltersListWidget->item( row )->setHidden( false );
+
+        filterSet.filterList.append( set[row] );
+        filterSet.back().setLoadedOffset( row );
+
+        refs[row].filter_index = filterSet.size() - 1;
+    }
+
+    availableFiltersListWidget->clearSelection();
+
+    if ( filterListWidget->selectionModel()->selectedIndexes().count() == 1 ) {
+        int selectedRow = filterListWidget->currentRow();
+        upFilterButton->setEnabled( selectedRow > 0 );
+        downFilterButton->setEnabled( selectedRow < ( filterListWidget->count() - 1 ) );
+    }
+}
+
+void FiltersDialog::on_removeLoadedFilterButton_clicked()
+{
+    const int origin = loadedFilterListWidget->currentRow();
+    assert ( origin >= 0 );
+    auto& refs = loadedFilterRefs[origin];
+
+    foreach ( const QListWidgetItem* item, activeFiltersListWidget->selectedItems() ) {
+        int index = activeFiltersListWidget->row( item );
+        LOG(logDEBUG) << "on_addLoadedFilterButton_clicked() index " << index;
+
+        removeFilter( refs[index] );
+    }
+    updatePropertyFields();
 }
 
 void FiltersDialog::updatePropertyFields()
@@ -168,16 +332,11 @@ void FiltersDialog::updatePropertyFields()
     const auto& selectedIndexes = filterListWidget->selectionModel()->selectedIndexes();
 
     if ( selectedIndexes.count() == 1 ) {
-        selectedRow_ = selectedIndexes.first().row();
-    }
-    else {
-        selectedRow_ = -1;
-    }
+        int selectedRow = selectedIndexes.first().row();
 
-    LOG(logDEBUG) << "updatePropertyFields(), row = " << selectedRow_;
+        LOG(logDEBUG) << "updatePropertyFields(), row = " << selectedRow;
 
-    if ( selectedRow_ >= 0 ) {
-        const Filter& currentFilter = filterSet[selectedRow_];
+        const Filter& currentFilter = filterSet[selectedRow];
 
         patternEdit->setText( currentFilter.pattern() );
         patternEdit->setEnabled( true );
@@ -200,12 +359,15 @@ void FiltersDialog::updatePropertyFields()
 
         // Enable the buttons if needed
         removeFilterButton->setEnabled( true );
-        upFilterButton->setEnabled( selectedRow_ > 0 );
+        upFilterButton->setEnabled( selectedRow > 0 );
         downFilterButton->setEnabled(
-                selectedRow_ < ( filterListWidget->count() - 1 ) );
+                selectedRow < ( filterListWidget->count() - 1 ) );
+        saveToFileButton->setEnabled( true );
     }
     else {
-        // Nothing is selected, reset and disable the controls
+        LOG(logDEBUG) << "updatePropertyFields(), row = " << ( selectedIndexes.count() > 1 ? '*' : 'X' );
+
+        // Nothing or multiple are selected, greys the buttons
         patternEdit->clear();
         patternEdit->setEnabled( false );
 
@@ -219,9 +381,13 @@ void FiltersDialog::updatePropertyFields()
 
         ignoreCaseCheckBox->setChecked( DEFAULT_IGNORE_CASE );
         ignoreCaseCheckBox->setEnabled( false );
-        removeFilterButton->setEnabled( false );
         upFilterButton->setEnabled( false );
         downFilterButton->setEnabled( false );
+        saveToFileButton->setEnabled( selectedIndexes.count() != 0 );
+
+        if ( selectedIndexes.count() == 0 ) {
+            removeFilterButton->setEnabled( false );
+        }
     }
 }
 
@@ -230,8 +396,9 @@ void FiltersDialog::updateFilterProperties()
     LOG(logDEBUG) << "updateFilterProperties()";
 
     // If a row is selected
-    if ( selectedRow_ >= 0 ) {
-        Filter& currentFilter = filterSet[selectedRow_];
+    if ( filterListWidget->selectionModel()->selectedIndexes().count() == 1 ) {
+        int selectedRow = filterListWidget->currentRow();
+        Filter& currentFilter = filterSet[selectedRow];
 
         // Update the internal data
         currentFilter.setPattern( patternEdit->text() );
@@ -248,17 +415,145 @@ void FiltersDialog::updateFilterProperties()
     }
 }
 
+void FiltersDialog::updateLoadedFilterList()
+{
+    LOG(logDEBUG) << "updateLoadedFilterList()";
+
+    const int origin = loadedFilterListWidget->currentRow();
+
+    if ( origin < 0 ) {
+        return;
+    }
+
+    const auto& namedFilterSet = loadedFilterSets[origin];
+    const auto& set = namedFilterSet.set;
+
+    loadedFilterItems.clear();
+    assert( availableFiltersListWidget->count() == 0 );
+    assert( activeFiltersListWidget->count() == 0 );
+
+    const auto& filterRefs = loadedFilterRefs[origin];
+    assert( set.size() == static_cast<int>( filterRefs.size() ) );
+
+    loadedFilterItems.reserve( filterRefs.size() * 2 ); // *2 since we have two lists
+    auto* loadedFilterItemsData = loadedFilterItems.data();
+    for( std::size_t i = 0; i < filterRefs.size(); ++i ) {
+        const Filter& filter = set[i];
+        const FilterRef& filterRef = filterRefs[i];
+
+        loadedFilterItems.emplace_back( filter.pattern() );
+        QListWidgetItem* new_item = &loadedFilterItems.back();
+        new_item->setForeground( QBrush( QColor( filter.foreColorName() ) ) );
+        new_item->setBackground( QBrush( QColor( filter.backColorName() ) ) );
+        availableFiltersListWidget->addItem( new_item );
+        new_item->setHidden( filterRef.isActive() );
+
+        loadedFilterItems.emplace_back( *new_item );
+        new_item = &loadedFilterItems.back();
+        activeFiltersListWidget->addItem( new_item );
+        new_item->setHidden( !filterRef.isActive() );
+    }
+    // we really shouldn't have reallocated, since we reserve()d
+    assert( loadedFilterItemsData == loadedFilterItems.data() );
+}
+
 //
 // Private functions
 //
 
 void FiltersDialog::moveFilter( int from, int to )
 {
+    int from_origin = filterSet[from].origin(),
+        to_origin   = filterSet[to  ].origin();
+
     filterSet.filterList.move( from, to );
+
+    // findLoadedFilterRef does a linear search over the array.
+    // We'd only require one pass if from_origin == to_origin, but we always do two for simplicity.
+    // Update the entries
+    // We need to find the entries before modifying them, otherwise we could set from_ref.filter_index = to and then we'd find the same filter again when doing findLoadedFilterRef( to_origin, to ) since we have two refs with filter_index == to.
+    FilterRef* from_ref = nullptr,
+             * to_ref   = nullptr;
+    if ( from_origin >= 0 ) {
+        from_ref = &findLoadedFilterRef( from_origin, from );
+    }
+    if ( to_origin >= 0 ) {
+        to_ref = &findLoadedFilterRef( to_origin, to );
+    }
+    if ( from_ref ) {
+        from_ref->filter_index = to;
+    }
+    if ( to_ref ) {
+        to_ref->filter_index = from;
+    }
 
     QListWidgetItem* item = filterListWidget->takeItem( from );
     filterListWidget->insertItem( to, item );
     filterListWidget->setCurrentRow( to );
+}
+
+FiltersDialog::FilterRef& FiltersDialog::findLoadedFilterRef( int origin, int index )
+{
+    using std::begin;
+    using std::end;
+
+    auto& refs = loadedFilterRefs[origin];
+    auto iter = begin( refs );
+
+    // Look for the Filter that has the index
+    for ( ; iter->filter_index != index; ++iter ) {
+        assert ( iter != end( refs ) );
+    }
+
+    return *iter;
+}
+
+void FiltersDialog::removeFilter( FilterRef& filterRef )
+{
+    assert( filterRef.isActive() );
+
+    // remove from the filterListWidget
+    // first we figure out which row to select next, if this is the last one
+    int newRow = -1;
+    if ( filterListWidget->currentRow() == filterRef.filter_index && filterListWidget->selectionModel()->selectedIndexes().count() == 1 ) {
+        int count = filterListWidget->count() - 1;
+        if ( filterRef.filter_index < count ) {
+            // Select the new item at the same index
+            newRow = filterRef.filter_index;
+        }
+        else {
+            newRow = count - 1;
+        }
+    }
+    delete filterListWidget->item( filterRef.filter_index );
+    // select a new row if we just deselected it
+    if ( newRow > 0 ) {
+        filterListWidget->setCurrentRow( newRow, QItemSelectionModel::SelectCurrent );
+    }
+
+    // we remove the item at the given index, so all indices that follow must be decremented
+    for ( auto& filterList : loadedFilterRefs ) {
+        for ( auto& ref : filterList ) {
+            if ( ref.filter_index > filterRef.filter_index ) {
+                --ref.filter_index;
+            }
+        }
+    }
+
+    // remove from loaded filters lists
+    if ( filterRef.loaded_index >= 0 ) {
+        int origin = filterSet[filterRef.filter_index].origin();
+        // remove if the filter list is current selected
+        if ( loadedFilterListWidget->currentRow() == origin ) {
+            availableFiltersListWidget->item( filterRef.loaded_index )->setHidden( false );
+            activeFiltersListWidget->item( filterRef.loaded_index )->setHidden( true );
+        }
+    }
+
+    filterSet.filterList.removeAt( filterRef.filter_index );
+
+    // this marks the filter as inactive
+    filterRef.filter_index = -1;
 }
 
 // Fills the color selection combo boxes
@@ -333,5 +628,40 @@ void FiltersDialog::populateFilterList()
         new_item->setForeground( QBrush( QColor( filter.foreColorName() ) ) );
         new_item->setBackground( QBrush( QColor( filter.backColorName() ) ) );
         filterListWidget->addItem( new_item );
+
+        if ( filter.origin() >= 0 ) {
+            if ( static_cast<std::size_t>( filter.origin() ) >= loadedFilterSets.size() ) {
+                LOG(logERROR) << "populateFilterList(): filter origin " << filter.origin() << " does not refer to a valid FilterSet";
+                continue;
+            }
+
+            auto& namedFilterSet = loadedFilterSets[filter.origin()];
+            auto& list = namedFilterSet.set.filterList;
+            if ( filter.loadedOffset() >= list.size() ) {
+                LOG(logERROR) << "populateFilterList(): filter offset " << filter.loadedOffset() << " does not refer to a valid Filter in " << namedFilterSet.filename.toStdString();
+                continue;
+            }
+
+            auto& refs = loadedFilterRefs[filter.origin()];
+            assert( refs.size() == static_cast<std::size_t>( list.size() ) );
+            auto& ref = refs[filter.loadedOffset()];
+
+            ref.filter_index = filterListWidget->count() - 1;
+        }
+
+    }
+}
+
+void FiltersDialog::populateLoadedFilterList()
+{
+    loadedFilterListWidget->clear();
+    for ( const NamedFilterSet& set : loadedFilterSets ) {
+        new QListWidgetItem( set.filename, loadedFilterListWidget );
+        loadedFilterRefs.emplace_back();
+        auto& refs = loadedFilterRefs.back();
+        refs.reserve(set.set.size());
+        for ( int i = 0; i < set.set.size(); ++i ) {
+            refs.emplace_back( i, -1 );
+        }
     }
 }
