@@ -116,6 +116,9 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     // The NamedFilterSet must be a loaded FilterSet (i.e. present in loadedFilterSets).
     // Also updates the associated UI elements.
     void saveChanges( NamedFilterSet& namedFilterSet );
+    FilterSet& addLoadedFilterSet( const QString& filename );
+
+    // Add an empty FilterSet to loadedFilterSets and loadedFilterListWidget.
 
     void populateColors();
     void populateFilterList();

@@ -250,6 +250,11 @@ void FiltersDialog::on_saveToFileButton_clicked()
             tr("Save Filters"), QDir::home().path(), tr("Filter files (*.conf)"));
 
     QSettings settings{ filename, QSettings::IniFormat };
+    FilterSet& set = addLoadedFilterSet( filename );
+    int newOrigin = loadedFilterRefs.size();
+    loadedFilterRefs.push_back( {} );
+    auto& filterRefs = loadedFilterRefs.back();
+    filterRefs.reserve( selectedItems.size() );
 
     settings.remove("");
     settings.setValue( "version", FILTERFILE_VERSION );
@@ -258,16 +263,58 @@ void FiltersDialog::on_saveToFileButton_clicked()
     settings.setValue( "version", FilterSet::FILTERSET_VERSION );
 
     settings.beginWriteArray( "filters" );
+    QBitArray checkOrigins{ static_cast<int>( loadedFilterSets.size() ) };
     for (int i = 0; i < selectedItems.size(); ++i) {
         auto selectedItem = selectedItems.at( i );
         int selectedRow = filterListWidget->row( selectedItem );
+        Filter& filter = filterSet[selectedRow];
 
         settings.setArrayIndex( i );
-        filterSet[selectedRow].saveToStorage( settings, false );
+        filter.saveToStorage( settings, false );
+        set.filterList.push_back( filter );
+
+        int origin = filter.origin();
+        // mark as inactive in loadedFilterRefs
+        if ( origin >= 0 ) {
+            checkOrigins.setBit( origin );
+            FilterRef& ref = findLoadedFilterRef( origin, selectedRow );
+            ref.modified = false;
+            ref.filter_index = -1;
+            // remove if the filter list is current selected
+            if ( loadedFilterListWidget->currentRow() == origin ) {
+                availableFiltersListWidget->item( ref.loaded_index )->setHidden( false );
+                QListWidgetItem* activeItem = activeFiltersListWidget->item( ref.loaded_index );
+                activeItem->setIcon( {} );
+                activeItem->setHidden( true );
+            }
+        }
+        filter.setOrigin( newOrigin );
+
+        filterRefs.push_back( { i, selectedRow } );
+        selectedItem->setIcon( loadedFilterIcon );
     }
     settings.endArray();
 
     settings.endGroup();
+
+    adoptChangesButton->setEnabled( false );
+    if ( selectedItems.size() == 1 ) {
+        filterOrigin->setText( filename );
+    }
+
+    for ( int i = 0; i < static_cast<int>( loadedFilterSets.size() ); ++i ) {
+        if ( checkOrigins.testBit( i ) ) {
+            bool changes = false;
+            for ( auto& ref : loadedFilterRefs[i] ) {
+                if ( ( changes |= ref.modified ) ) {
+                    break;
+                }
+            }
+            if ( !changes ) {
+                loadedFilterListWidget->item( i )->setIcon( {} );
+            }
+        }
+    }
 }
 
 void FiltersDialog::on_adoptChangesButton_clicked()
@@ -365,17 +412,10 @@ void FiltersDialog::on_addFilterFile_clicked()
     QSettings settings{ filename, QSettings::IniFormat };
     if ( settings.contains( "version" ) ) {
         if ( settings.value( "version" ) == FILTERFILE_VERSION ) {
-            auto& namedSets = loadedFilterSets.namedFilterSets;
-            int new_origin = namedSets.size();
-            assert( loadedFilterListWidget->count() == new_origin );
-            assert( static_cast<int>( loadedFilterRefs.size() ) == new_origin );
-            namedSets.emplace_back( filename );
-            auto& namedSet = namedSets.back();
-
-            FilterSet& set = namedSet.set;
+            FilterSet& set = addLoadedFilterSet( filename );
+            int new_origin = loadedFilterRefs.size() - 1;
             set.retrieveFromStorage( settings, new_origin );
 
-            loadedFilterListWidget->addItem( new QListWidgetItem( filename ) );
             loadedFilterRefs.push_back( {} );
             auto& filterRefs = loadedFilterRefs.back();
             filterRefs.reserve( set.size() );
@@ -912,6 +952,19 @@ void FiltersDialog::saveChanges( NamedFilterSet& namedFilterSet )
         item->setBackground( Qt::white );
         namedFilterSet.missing = false;
     }
+}
+
+FilterSet& FiltersDialog::addLoadedFilterSet( const QString& filename )
+{
+    auto& namedSets = loadedFilterSets.namedFilterSets;
+    int new_origin = namedSets.size();
+    assert( loadedFilterListWidget->count() == new_origin );
+    assert( static_cast<int>( loadedFilterRefs.size() ) == new_origin );
+    namedSets.emplace_back( filename );
+
+    loadedFilterListWidget->addItem( new QListWidgetItem( filename ) );
+
+    return namedSets.back().set;
 }
 
 // Fills the color selection combo boxes
