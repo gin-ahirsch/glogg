@@ -58,6 +58,8 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
     // Index of the row currently selected or -1 if none.
     int selectedRow_;
 
+    // Swap two filters in filterSet, update filterListWidget.
+    void moveFilter( int from, int to );
     void populateColors();
     void populateFilterList();
 };

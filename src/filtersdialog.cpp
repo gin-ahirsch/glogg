@@ -122,11 +122,7 @@ void FiltersDialog::on_upFilterButton_clicked()
     LOG(logDEBUG) << "on_upFilterButton_clicked() index " << index;
 
     if ( index > 0 ) {
-        filterSet.filterList.move( index, index - 1 );
-
-        QListWidgetItem* item = filterListWidget->takeItem( index );
-        filterListWidget->insertItem( index - 1, item );
-        filterListWidget->setCurrentRow( index - 1 );
+        moveFilter( index, index - 1 );
     }
 }
 
@@ -136,11 +132,7 @@ void FiltersDialog::on_downFilterButton_clicked()
     LOG(logDEBUG) << "on_downFilterButton_clicked() index " << index;
 
     if ( ( index >= 0 ) && ( index < ( filterListWidget->count() - 1 ) ) ) {
-        filterSet.filterList.move( index, index + 1 );
-
-        QListWidgetItem* item = filterListWidget->takeItem( index );
-        filterListWidget->insertItem( index + 1, item );
-        filterListWidget->setCurrentRow( index + 1 );
+        moveFilter( index, index + 1 );
     }
 }
 
@@ -259,6 +251,15 @@ void FiltersDialog::updateFilterProperties()
 //
 // Private functions
 //
+
+void FiltersDialog::moveFilter( int from, int to )
+{
+    filterSet.filterList.move( from, to );
+
+    QListWidgetItem* item = filterListWidget->takeItem( from );
+    filterListWidget->insertItem( to, item );
+    filterListWidget->setCurrentRow( to );
+}
 
 // Fills the color selection combo boxes
 void FiltersDialog::populateColors()
