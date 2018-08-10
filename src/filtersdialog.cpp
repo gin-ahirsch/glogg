@@ -173,11 +173,14 @@ void FiltersDialog::on_buttonBox_clicked( QAbstractButton* button )
 
 void FiltersDialog::updatePropertyFields()
 {
-    if ( filterListWidget->selectedItems().count() >= 1 )
-        selectedRow_ = filterListWidget->row(
-                filterListWidget->selectedItems().at(0) );
-    else
+    const auto& selectedIndexes = filterListWidget->selectionModel()->selectedIndexes();
+
+    if ( selectedIndexes.count() == 1 ) {
+        selectedRow_ = selectedIndexes.first().row();
+    }
+    else {
         selectedRow_ = -1;
+    }
 
     LOG(logDEBUG) << "updatePropertyFields(), row = " << selectedRow_;
 
