@@ -67,6 +67,9 @@ class Filter
 // Represents an ordered set of filters to be applied to each line displayed.
 class FilterSet : public Persistable
 {
+  private:
+    using FilterList = QList<Filter>;
+
   public:
     // Construct an empty filter set
     FilterSet();
@@ -80,10 +83,6 @@ class FilterSet : public Persistable
     // Reads/writes the current config in the QSettings object passed
     virtual void saveToStorage( QSettings& settings ) const;
     virtual void retrieveFromStorage( QSettings& settings );
-
-    // Should be private really, but I don't know how to have 
-    // it recognised by QVariant then.
-    typedef QList<Filter> FilterList;
 
     // Operators for serialization
     // (must be kept to migrate filters from <=0.8.2)
@@ -102,8 +101,6 @@ class FilterSet : public Persistable
     friend class FiltersDialog;
 };
 
-Q_DECLARE_METATYPE(Filter)
 Q_DECLARE_METATYPE(FilterSet)
-Q_DECLARE_METATYPE(FilterSet::FilterList)
 
 #endif
