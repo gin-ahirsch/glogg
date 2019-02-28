@@ -165,19 +165,24 @@ void CrawlerWidget::keyPressEvent( QKeyEvent* keyEvent )
 {
     bool noModifier = keyEvent->modifiers() == Qt::NoModifier;
 
-    if ( keyEvent->key() == Qt::Key_V && noModifier )
+    if ( keyEvent->key() == Qt::Key_V && noModifier ) {
         visibilityBox->setCurrentIndex(
                 ( visibilityBox->currentIndex() + 1 ) % visibilityBox->count() );
-    else {
-        const char character = (keyEvent->text())[0].toLatin1();
-
-        if ( character == '+' )
-            changeTopViewSize( 1 );
-        else if ( character == '-' )
-            changeTopViewSize( -1 );
-        else
-            QSplitter::keyPressEvent( keyEvent );
+        return;
     }
+
+    QString text = keyEvent->text();
+    if ( text.count() == 1 ) {
+        switch( text[0].toLatin1() ) {
+            case '+':
+                changeTopViewSize( 1 );
+                return;
+            case '-':
+                changeTopViewSize( -1 );
+                return;
+        }
+    }
+    QSplitter::keyPressEvent( keyEvent );
 }
 
 //
@@ -278,9 +283,9 @@ void CrawlerWidget::startNewSearch()
 {
     // Record the search line in the recent list
     // (reload the list first in case another glogg changed it)
-    GetPersistentInfo().retrieve( "savedSearches" );
+    GetPersistentInfo().retrieve( *savedSearches_ );
     savedSearches_->addRecent( searchLineEdit->currentText() );
-    GetPersistentInfo().save( "savedSearches" );
+    GetPersistentInfo().save( *savedSearches_ );
 
     // Update the SearchLine (history)
     updateSearchCombo();
@@ -386,7 +391,7 @@ void CrawlerWidget::markLineFromFiltered( qint64 line )
     if ( line < logFilteredData_->getNbLine() ) {
         qint64 line_in_file = logFilteredData_->getMatchingLineNumber( line );
         if ( logFilteredData_->filteredLineTypeByIndex( line )
-                == LogFilteredData::Mark )
+                & LogFilteredData::Mark )
             logFilteredData_->deleteMark( line_in_file );
         else
             logFilteredData_->addMark( line_in_file );
@@ -572,8 +577,10 @@ void CrawlerWidget::changeFilteredViewVisibility( int index )
 
     filteredView->setVisibility( visibility );
 
-    const int lineIndex = logFilteredData_->getLineIndexNumber( currentLineNumber_ );
-    filteredView->selectAndDisplayLine( lineIndex );
+    if ( logFilteredData_->getNbLine() > 0 ) {
+        const int lineIndex = logFilteredData_->getLineIndexNumber( currentLineNumber_ );
+        filteredView->selectAndDisplayLine( lineIndex );
+    }
 }
 
 void CrawlerWidget::addToSearch( const QString& string )
