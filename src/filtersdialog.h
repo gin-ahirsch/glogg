@@ -86,8 +86,8 @@ class FiltersDialog : public QDialog, public Ui::FiltersDialog
 
         bool isActive() const { return filter_index >= 0; }
 
-        int loaded_index; // index into a local filter array (Persistent( "loadedFilterSets" )->filterSetMap[filename], this->activeFilters[filter.origin()], this->activeFiltersListWidget, this->availableFiltersListWidget)
-        int filter_index; // index into this->filterSet
+        int loaded_index; // index into a local filter array (Persistent( "loadedFilterSets" )->filterSetMap[filename], this->loadedFilterRefs[filter.origin()], this->activeFiltersListWidget, this->availableFiltersListWidget)
+        int filter_index; // index into this->filterSet, this->filterListWidget
         bool modified = false;
     };
 
