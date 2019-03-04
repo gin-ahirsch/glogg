@@ -271,7 +271,6 @@ void FiltersDialog::on_saveToFileButton_clicked()
 
         settings.setArrayIndex( i );
         filter.saveToStorage( settings, false );
-        set.filterList.push_back( filter );
 
         int origin = filter.origin();
         // mark as inactive in loadedFilterRefs
@@ -290,6 +289,7 @@ void FiltersDialog::on_saveToFileButton_clicked()
         }
         filter.setOrigin( newOrigin );
 
+        set.filterList.push_back( filter );
         filterRefs.push_back( { i, selectedRow } );
         selectedItem->setIcon( loadedFilterIcon );
     }
