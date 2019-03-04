@@ -21,6 +21,7 @@
 
 #include <cassert>
 #include <utility>
+#include <boost/range/adaptor/indexed.hpp>
 #include <QBitArray>
 #include <QDir>
 #include <QFileDialog>
@@ -251,10 +252,39 @@ void FiltersDialog::on_saveToFileButton_clicked()
 
     QSettings settings{ filename, QSettings::IniFormat };
     QBitArray checkOrigins{ static_cast<int>( loadedFilterSets.size() ) };
-    FilterSet& set = addLoadedFilterSet( filename );
-    int newOrigin = loadedFilterRefs.size();
-    loadedFilterRefs.push_back( {} );
-    auto& filterRefs = loadedFilterRefs.back();
+    FilterSet *setPtr = nullptr;
+    int newOrigin;
+    FilterRefList::pointer filterRefsPtr;
+    for ( const auto &element : boost::adaptors::index( loadedFilterSets.namedFilterSets ) ) {
+        auto &namedSet = element.value();
+        if ( namedSet.filename == filename ) {
+            Q_ASSERT( !setPtr );
+            setPtr = &namedSet.set;
+            setPtr->filterList.clear();
+
+            newOrigin = element.index();
+
+            filterRefsPtr = &loadedFilterRefs[newOrigin];
+            for ( auto &ref : *filterRefsPtr ) {
+                if ( ref.isActive() ) {
+                    filterSet[ref.filter_index].setOrigin( -1 );
+                    auto item = filterListWidget->item( ref.filter_index );
+                    item->setIcon( {} );
+                }
+            }
+            filterRefsPtr->clear();
+
+            checkOrigins.setBit( newOrigin );
+        }
+    }
+    if ( !setPtr ) {
+        setPtr = &addLoadedFilterSet( filename );
+        newOrigin = loadedFilterRefs.size();
+        loadedFilterRefs.push_back( {} );
+        filterRefsPtr = &loadedFilterRefs.back();
+    }
+    FilterSet& set = *setPtr;
+    auto& filterRefs = *filterRefsPtr;
     filterRefs.reserve( selectedItems.size() );
 
     settings.remove("");
@@ -316,6 +346,10 @@ void FiltersDialog::on_saveToFileButton_clicked()
                 loadedFilterListWidget->item( i )->setIcon( {} );
             }
         }
+    }
+
+    if ( loadedFilterListWidget->currentRow() == newOrigin ) {
+        updateLoadedFilterList();
     }
 }
 
