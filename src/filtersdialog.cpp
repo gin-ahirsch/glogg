@@ -250,6 +250,7 @@ void FiltersDialog::on_saveToFileButton_clicked()
             tr("Save Filters"), QDir::home().path(), tr("Filter files (*.conf)"));
 
     QSettings settings{ filename, QSettings::IniFormat };
+    QBitArray checkOrigins{ static_cast<int>( loadedFilterSets.size() ) };
     FilterSet& set = addLoadedFilterSet( filename );
     int newOrigin = loadedFilterRefs.size();
     loadedFilterRefs.push_back( {} );
@@ -263,7 +264,7 @@ void FiltersDialog::on_saveToFileButton_clicked()
     settings.setValue( "version", FilterSet::FILTERSET_VERSION );
 
     settings.beginWriteArray( "filters" );
-    QBitArray checkOrigins{ static_cast<int>( loadedFilterSets.size() ) };
+    set.filterList.reserve( selectedItems.size() );
     for (int i = 0; i < selectedItems.size(); ++i) {
         auto selectedItem = selectedItems.at( i );
         int selectedRow = filterListWidget->row( selectedItem );
@@ -273,11 +274,12 @@ void FiltersDialog::on_saveToFileButton_clicked()
         filter.saveToStorage( settings, false );
 
         int origin = filter.origin();
-        // mark as inactive in loadedFilterRefs
+        Q_ASSERT( origin != newOrigin );
         if ( origin >= 0 ) {
             checkOrigins.setBit( origin );
             FilterRef& ref = findLoadedFilterRef( origin, selectedRow );
             ref.modified = false;
+            // mark as inactive in loadedFilterRefs
             ref.filter_index = -1;
             // remove if the filter list is current selected
             if ( loadedFilterListWidget->currentRow() == origin ) {
@@ -302,7 +304,7 @@ void FiltersDialog::on_saveToFileButton_clicked()
         filterOrigin->setText( filename );
     }
 
-    for ( int i = 0; i < static_cast<int>( loadedFilterSets.size() ); ++i ) {
+    for ( int i = 0; i < checkOrigins.count(); ++i ) {
         if ( checkOrigins.testBit( i ) ) {
             bool changes = false;
             for ( auto& ref : loadedFilterRefs[i] ) {
