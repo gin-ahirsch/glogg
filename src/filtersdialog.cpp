@@ -249,8 +249,15 @@ void FiltersDialog::on_saveToFileButton_clicked()
 
     QString filename = QFileDialog::getSaveFileName(this,
             tr("Save Filters"), QDir::home().path(), tr("Filter files (*.conf)"));
+    if ( filename.isNull() ) {
+        return;
+    }
 
     QSettings settings{ filename, QSettings::IniFormat };
+    if ( !settings.isWritable() ) {
+        QMessageBox::critical( this, "Error", QString{ "%1 is not writable." }.arg( filename ) );
+        return;
+    }
     QBitArray checkOrigins{ static_cast<int>( loadedFilterSets.size() ) };
     FilterSet *setPtr = nullptr;
     int newOrigin;
@@ -444,34 +451,35 @@ void FiltersDialog::on_addFilterFile_clicked()
 
     QString filename = QFileDialog::getOpenFileName(this,
             tr("Load Filters"), QDir::home().path(), tr("Filter files (*.conf)"));
+    if ( filename.isNull() ) {
+        return;
+    }
 
     QSettings settings{ filename, QSettings::IniFormat };
-    if ( settings.contains( "version" ) ) {
-        if ( settings.value( "version" ) == FILTERFILE_VERSION ) {
-            FilterSet& set = addLoadedFilterSet( filename );
-            int new_origin = loadedFilterRefs.size() - 1;
-            set.retrieveFromStorage( settings, new_origin );
-
-            loadedFilterRefs.push_back( {} );
-            auto& filterRefs = loadedFilterRefs.back();
-            filterRefs.reserve( set.size() );
-
-            for( int i = 0; i < set.size(); ++i ) {
-                filterRefs.push_back( { i, -1 } );
-            }
-
-            loadedFilterListWidget->setCurrentRow( new_origin );
-            updateLoadedFilterList();
-        }
-        else {
-            //FIXME: popup
-            LOG(logERROR) << "Unknown version of FilterFile, ignoring it...";
+    if ( ! settings.contains( "version" ) ) {
+        QMessageBox::critical( this, "Error", QString{ "%1 is not a readable Filter-file." }.arg( filename ) );
+        return;
+    }
+    if ( settings.value( "version" ) != FILTERFILE_VERSION ) {
+        if ( QMessageBox::critical( this, "Error", QString{ "%1 has unrecognized Filter-file version." }.arg( filename ),QMessageBox::StandardButton::Abort | QMessageBox::StandardButton::Ignore ) != QMessageBox::Ignore ) {
+            return;
         }
     }
-    else {
-        //FIXME: popup
-        LOG(logERROR) << "Invalid FilterFile format, ignoring it...";
+
+    FilterSet& set = addLoadedFilterSet( filename );
+    int new_origin = loadedFilterRefs.size() - 1;
+    set.retrieveFromStorage( settings, new_origin );
+
+    loadedFilterRefs.push_back( {} );
+    auto& filterRefs = loadedFilterRefs.back();
+    filterRefs.reserve( set.size() );
+
+    for ( int i = 0; i < set.size(); ++i ) {
+        filterRefs.push_back( { i, -1 } );
     }
+
+    loadedFilterListWidget->setCurrentRow( new_origin );
+    updateLoadedFilterList();
 }
 
 void FiltersDialog::on_removeFilterFile_clicked()
